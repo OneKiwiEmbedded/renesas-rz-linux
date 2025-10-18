@@ -18,8 +18,9 @@
 
 	aliases {
 		serial0 = &scif0;
-		uart2 = &scif2;
-		uart3 = &scif3;
+		serial1 = &scif1;
+		serial2 = &scif2;
+		serial3 = &scif3;
 		mmc0 = &sdhi0;
 		mmc1 = &sdhi1;
 		ethernet0 = &eth0;
