@@ -1,8 +1,11 @@
 /dts-v1/;
-#include "r9a07g054l2.dtsi"
+#include "onekiwi-r9a07g054l2.dtsi"
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
+
+#define DSI_HDMI	1
+#define DSI_PANEL	0
 
 / {
 	model = "OneKiwi RZ/V2L";
@@ -75,6 +78,15 @@
 
 	vspm_if {
 		compatible = "renesas,vspm_if";
+	};
+
+	udmabuf@0 {
+		compatible = "ikwzm,u-dma-buf";
+		device-name = "udmabuf0";
+		minor-number = <0>;
+		size = <0x4000000>; // 64MiB
+		dma-coherent;
+		memory-region = <&image_buf0>;
 	};
 
 	reg_1p1v: regulator-vdd-core {
@@ -184,6 +196,7 @@
 		};
 	};
 
+#if DSI_HDMI
     hdmi-out {
 		compatible = "hdmi-connector";
 		type = "d";
@@ -193,6 +206,15 @@
 				remote-endpoint = <&adv7535_out>;
 			};
 		};
+	};
+#endif
+
+	backlight: backlight {
+		compatible = "pwm-backlight";
+		pwms = <&gpt2 0 40000 0>;
+		brightness-levels = <0 8 32 64 96 128 160 192 224 255>;
+		default-brightness-level = <8>;
+		status = "okay";
 	};
 
 	gpio-keys {
@@ -269,18 +291,73 @@
 	};
 };
 
+&drpai0 {
+	memory-region = <&drp_reserved>;
+	linux-memory-region = < &{/memory@48000000} >;
+	status = "okay";
+};
+
 &dsi0 {
 	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
 
+#if DSI_HDMI
 	ports {
 		port@1 {
-			dsi0_out: endpoint {
+			dsi_out: endpoint {
 				remote-endpoint = <&adv7535_in>;
 				data-lanes = <1 2 3 4>;
 			};
 		};
 	};
+#endif
+	/*
+	panel@0 {
+		status = "okay";
+		compatible = "avnet,ph720128t005","ilitek,ili9881c";
+		reset-gpios = <&pinctrl RZG2L_GPIO(22, 1) GPIO_ACTIVE_LOW>;
+		//te-gpios    = <&gpioX Z GPIO_ACTIVE_HIGH>;  // LCD_TE (tuỳ cần)
+		//backlight = <&bl>;
+		lcd-model = "ph720128t005";
+		dsi-lanes = <2>;
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&dsi0_out>;
+			};
+		};
+	};*/
+
+#if DSI_PANEL
+	ports {
+		port@1 {
+			dsi_out: endpoint {
+				remote-endpoint = <&panel_in>;
+				data-lanes = <1 2>;
+			};
+		};
+	};
+
+	mipi_panel: panel@0 {
+		compatible = "ilitek,ph720128t005";
+		reg = <0>;
+		power-gpios = <&pinctrl RZG2L_GPIO(42, 4) GPIO_ACTIVE_HIGH>;
+		switch-gpios = <&pinctrl RZG2L_GPIO(43, 2) GPIO_ACTIVE_HIGH>;
+		backlight = <&backlight>;
+		status = "okay";
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&dsi_out>;
+			};
+		};
+	};
+#endif
 };
+
+// https://github.com/Avnet/renesas-linux-cip/blob/rzboard_v2l_v5.10.201/arch/arm64/boot/dts/renesas/rzboard.dts
+// https://github.com/MYiR-Dev/myir-renesas-linux/blob/develop-rz-L5.10.83/arch/arm64/boot/dts/myir/myb-rzg2ul-disp.dts
+// https://github.com/Vekatech/meta-vkboards/blob/main/meta-vk-common/recipes-kernel/linux/linux-renesas/0008-add-support-for-vkrzg2lc-board-and-its-overlays.patch/
 
 &du {
 	status = "okay";
@@ -331,7 +408,16 @@
 };
 
 &gpu {
+	status = "okay";
 	mali-supply = <&reg_1p1v>;
+};
+
+&gpt2 {
+	pinctrl-0 = <&gpt2_pins>;
+	pinctrl-names = "default";
+	channel="channel_A";
+	//poeg = <&poegd>;
+	status = "okay";
 };
 
 &hsusb {
@@ -344,6 +430,7 @@
 	pinctrl-names = "default";
 	status = "okay";
 
+#if DSI_HDMI
 	adv7535: hdmi@3d {
 		compatible = "adi,adv7535";
 		reg = <0x3d>;
@@ -367,7 +454,7 @@
 			port@0 {
 				reg = <0>;
 				adv7535_in: endpoint@0 {
-					remote-endpoint = <&dsi0_out>;
+					remote-endpoint = <&dsi_out>;
 				};
 			};
 
@@ -377,15 +464,24 @@
 					remote-endpoint = <&hdmi_con_out>;
 				};
 			};
-
-			port@2 {
-				reg = <2>;
-				codec_endpoint: endpoint {
-					remote-endpoint = <&i2s2_cpu_endpoint>;
-				};
-			};
 		};
 	};
+#endif
+
+#if DSI_PANEL
+	gt911: gt911_ts@14 {
+		compatible = "goodix,gt911";
+		reg = <0x14>;
+
+		interrupt-parent = <&pinctrl>;
+		interrupts = <RZG2L_GPIO(1, 1) IRQ_TYPE_EDGE_FALLING>;
+		irq-gpios = <&pinctrl RZG2L_GPIO(1, 1) GPIO_ACTIVE_HIGH>;   /* DSI_TS_nINT */
+		reset-gpios = <&pinctrl RZG2L_GPIO(43, 3) GPIO_ACTIVE_HIGH>; /* DSI_TS_RST */
+		touchscreen-size-x = <720>;
+		touchscreen-size-y = <1280>;
+		status = "okay";
+	};
+#endif
 };
 
 &i2c1 {
@@ -599,17 +695,9 @@
 
 &ssi0 {
 	pinctrl-0 = <&ssi0_pins>;
+	pinctrl-0 = <&ssi0_pins &sound_clk_pins>;
 	pinctrl-names = "default";
 	status = "okay";
-
-	ports {
-		i2s2_port0: port@0 {
-			i2s2_cpu_endpoint: endpoint {
-				remote-endpoint = <&codec_endpoint>;
-				dai-format = "i2s";
-			};
-		};
-	};
 };
 
 &usb2_phy0 {
@@ -651,6 +739,10 @@
 	can1_pins: can1 {
 		pinmux = <RZG2L_PORT_PINMUX(13,0,2)>, /* CAN1_RX */
 				 <RZG2L_PORT_PINMUX(12,1,2)>; /* CAN1_TX */
+	};
+
+	gpt2_pins: gpt2 {
+		pinmux = <RZG2L_PORT_PINMUX(2,0,3)>; /* GTIOC2A_A */
 	};
 
 	/* Ethernet pin configuration */
