@@ -7,10 +7,13 @@
 
 /dts-v1/;
 
-#include "r9a07g054l2-onekiwi.dtsi"
+#include "onekiwi-r9a07g054l2.dtsi"
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
+
+#define DSI_HDMI	1
+#define DSI_PANEL	0
 
 / {
 	model = "OneKiwi RZ/V2L";
@@ -28,57 +31,6 @@
 
 	chosen {
 		stdout-path = "serial0:115200n8";
-	};
-
-	osc1: cec-clock {
-		compatible = "fixed-clock";
-		#clock-cells = <0>;
-		clock-frequency = <12000000>;
-	};
-
-	hdmi-out {
-		compatible = "hdmi-connector";
-		type = "d";
-		port {
-			hdmi_con_out: endpoint {
-				remote-endpoint = <&adv7535_out>;
-			};
-		};
-	};
-
-	clk_ext_audio: clk_ext_audio {
-		compatible = "fixed-clock";
-		#clock-cells = <0>;
-		clock-frequency = <11289600>;
-	};
-
-	sound_rzg2l: sound {
-		compatible = "simple-audio-card";
-		simple-audio-card,name = "RZV2L-SGTL5000";
-		simple-audio-card,format = "i2s";
-		simple-audio-card,bitclock-master = <&cpu_dai>;
-		simple-audio-card,frame-master = <&cpu_dai>;
-		simple-audio-card,mclk-fs = <256>;
-		simple-audio-card,widgets =
-			"Microphone", "Microphone Jack",
-			"Headphone", "Headphone Jack",
-			"Speaker", "Speaker Ext",
-			"Line", "Line In Jack";
-		simple-audio-card,routing =
-			"MIC_IN", "Microphone Jack",
-			"Microphone Jack", "Mic Bias",
-			"LINE_IN", "Line In Jack",
-			"Headphone Jack", "HP_OUT",
-			"Speaker Ext", "LINE_OUT";
-
-		cpu_dai: simple-audio-card,cpu {
-			sound-dai = <&ssi0>;
-			system-clock-frequency = <11289600>;
-		};
-		codec_dai: simple-audio-card,codec {
-			sound-dai = <&sgtl5000>;
-			//clocks = <&versa3 3>;
-		};
 	};
 
 	/* Reserved memory regions */
@@ -146,6 +98,68 @@
 
 	vspm_if {
 		compatible = "renesas,vspm_if";
+	};
+
+	osc1: cec-clock {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <12000000>;
+	};
+
+#if DSI_HDMI
+    hdmi-out {
+		compatible = "hdmi-connector";
+		type = "d";
+
+		port {
+			hdmi_con_out: endpoint {
+				remote-endpoint = <&adv7535_out>;
+			};
+		};
+	};
+#endif
+
+	backlight: backlight {
+		compatible = "pwm-backlight";
+		pwms = <&gpt2 0 40000 0>;
+		brightness-levels = <0 8 32 64 96 128 160 192 224 255>;
+		default-brightness-level = <8>;
+		status = "okay";
+	};
+
+	clk_ext_audio: clk_ext_audio {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <11289600>;
+	};
+
+	sound_rzg2l: sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "RZV2L-SGTL5000";
+		simple-audio-card,format = "i2s";
+		simple-audio-card,bitclock-master = <&cpu_dai>;
+		simple-audio-card,frame-master = <&cpu_dai>;
+		simple-audio-card,mclk-fs = <256>;
+		simple-audio-card,widgets =
+			"Microphone", "Microphone Jack",
+			"Headphone", "Headphone Jack",
+			"Speaker", "Speaker Ext",
+			"Line", "Line In Jack";
+		simple-audio-card,routing =
+			"MIC_IN", "Microphone Jack",
+			"Microphone Jack", "Mic Bias",
+			"LINE_IN", "Line In Jack",
+			"Headphone Jack", "HP_OUT",
+			"Speaker Ext", "LINE_OUT";
+
+		cpu_dai: simple-audio-card,cpu {
+			sound-dai = <&ssi0>;
+			system-clock-frequency = <11289600>;
+		};
+		codec_dai: simple-audio-card,codec {
+			sound-dai = <&sgtl5000>;
+			//clocks = <&versa3 3>;
+		};
 	};
 
 	/* Voltage Regulators */
@@ -306,16 +320,65 @@
 
 &dsi {
 	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
 
+#if DSI_HDMI
 	ports {
 		port@1 {
-			dsi0_out: endpoint {
-				data-lanes = <1 2 3 4>;
+			dsi_out: endpoint {
 				remote-endpoint = <&adv7535_in>;
+				data-lanes = <1 2 3 4>;
 			};
 		};
 	};
+#endif
+	/*
+	panel@0 {
+		status = "okay";
+		compatible = "avnet,ph720128t005","ilitek,ili9881c";
+		reset-gpios = <&pinctrl RZG2L_GPIO(22, 1) GPIO_ACTIVE_LOW>;
+		//te-gpios    = <&gpioX Z GPIO_ACTIVE_HIGH>;  // LCD_TE (tuỳ cần)
+		//backlight = <&bl>;
+		lcd-model = "ph720128t005";
+		dsi-lanes = <2>;
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&dsi0_out>;
+			};
+		};
+	};*/
+
+#if DSI_PANEL
+	ports {
+		port@1 {
+			dsi_out: endpoint {
+				remote-endpoint = <&panel_in>;
+				data-lanes = <1 2>;
+			};
+		};
+	};
+
+	mipi_panel: panel@0 {
+		compatible = "ilitek,ph720128t005";
+		reg = <0>;
+		power-gpios = <&pinctrl RZG2L_GPIO(42, 4) GPIO_ACTIVE_HIGH>;
+		switch-gpios = <&pinctrl RZG2L_GPIO(43, 2) GPIO_ACTIVE_HIGH>;
+		backlight = <&backlight>;
+		status = "okay";
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&dsi_out>;
+			};
+		};
+	};
+#endif
 };
+
+// https://github.com/Avnet/renesas-linux-cip/blob/rzboard_v2l_v5.10.201/arch/arm64/boot/dts/renesas/rzboard.dts
+// https://github.com/MYiR-Dev/myir-renesas-linux/blob/develop-rz-L5.10.83/arch/arm64/boot/dts/myir/myb-rzg2ul-disp.dts
+// https://github.com/Vekatech/meta-vkboards/blob/main/meta-vk-common/recipes-kernel/linux/linux-renesas/0008-add-support-for-vkrzg2lc-board-and-its-overlays.patch/
 
 /* Display Unit configuration */
 &du {
@@ -372,6 +435,14 @@
 	clock-frequency = <24000000>;
 };
 
+&gpt2 {
+	pinctrl-0 = <&gpt2_pins>;
+	pinctrl-names = "default";
+	channel="channel_A";
+	//poeg = <&poegd>;
+	status = "okay";
+};
+
 &gpu {
 	status = "okay";
 	mali-supply = <&reg_1p1v>;
@@ -382,20 +453,20 @@
 	pinctrl-names = "default";
 	status = "okay";
 
+#if DSI_HDMI
 	adv7535: hdmi@3d {
 		compatible = "adi,adv7535";
 		reg = <0x3d>;
 
-		interrupt-parent = <&pinctrl>;
-		interrupts = <RZG2L_GPIO(1, 1) IRQ_TYPE_EDGE_FALLING>;
-		clocks = <&osc1>;
-		clock-names = "cec";
 		avdd-supply = <&reg_1p8v>;
 		dvdd-supply = <&reg_1p8v>;
 		pvdd-supply = <&reg_1p8v>;
 		a2vdd-supply = <&reg_1p8v>;
 		v3p3-supply = <&reg_3p3v>;
 		v1p2-supply = <&reg_1p8v>;
+
+		interrupt-parent = <&pinctrl>;
+		interrupts = <RZG2L_GPIO(1, 1) IRQ_TYPE_EDGE_FALLING>;
 
 		adi,dsi-lanes = <4>;
 
@@ -405,20 +476,37 @@
 
 			port@0 {
 				reg = <0>;
-				adv7535_in: endpoint {
-					remote-endpoint = <&dsi0_out>;
+				adv7535_in: endpoint@0 {
+					remote-endpoint = <&dsi_out>;
 				};
 			};
 
 			port@1 {
 				reg = <1>;
-				adv7535_out: endpoint {
+				adv7535_out: endpoint@1 {
 					remote-endpoint = <&hdmi_con_out>;
 				};
 			};
 		};
 	};
+#endif
+
+#if DSI_PANEL
+	gt911: gt911_ts@14 {
+		compatible = "goodix,gt911";
+		reg = <0x14>;
+
+		interrupt-parent = <&pinctrl>;
+		interrupts = <RZG2L_GPIO(1, 1) IRQ_TYPE_EDGE_FALLING>;
+		irq-gpios = <&pinctrl RZG2L_GPIO(1, 1) GPIO_ACTIVE_HIGH>;   /* DSI_TS_nINT */
+		reset-gpios = <&pinctrl RZG2L_GPIO(43, 3) GPIO_ACTIVE_HIGH>; /* DSI_TS_RST */
+		touchscreen-size-x = <720>;
+		touchscreen-size-y = <1280>;
+		status = "okay";
+	};
+#endif
 };
+
 
 &i2c1 {
 	pinctrl-0 = <&i2c1_pins>;
@@ -682,6 +770,10 @@
 				 <RZG2L_PORT_PINMUX(26, 1, 1)>; /* ET0_RXD3 */
 			power-source = <1800>;
 		};
+	};
+
+	gpt2_pins: gpt2 {
+		pinmux = <RZG2L_PORT_PINMUX(2,0,3)>; /* GTIOC2A_A */
 	};
 
 	i2c0_pins: i2c0 {
