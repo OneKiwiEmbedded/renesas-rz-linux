@@ -120,15 +120,6 @@
 		regulator-always-on;
 	};
 
-	vccq_sdhi1: regulator-vccq-sdhi1 {
-		compatible = "regulator-gpio";
-		regulator-name = "SDHI1 VccQ";
-		regulator-min-microvolt = <1800000>;
-		regulator-max-microvolt = <3300000>;
-		gpios-states = <1>;
-		states = <3300000 1>, <1800000 0>;
-	};
-
 	ov5645_vdddo_1v8: 1p8v {
 		compatible = "regulator-fixed";
 		regulator-name = "camera_vdddo";
@@ -201,7 +192,6 @@
 
 		codec_dai: simple-audio-card,codec {
 			sound-dai = <&sgtl5000>;
-			//clocks = <&versa3 3>;
 		};
 	};
 
@@ -725,21 +715,6 @@
 	status = "okay";
 };
 
-/* SD Card controller configuration
-&sdhi1 {
-	pinctrl-0 = <&sdhi1_pins>;
-	pinctrl-names = "default";
-	//pinctrl-1 = <&sdhi1_pins_uhs>;
-	//pinctrl-names = "default", "state_uhs";
-
-	vmmc-supply = <&reg_3p3v>;
-	//vqmmc-supply = <&vccq_sdhi1>;
-	bus-width = <4>;
-	//sd-uhs-sdr50; // UHS SDR50 support, uncomment if your board support
-	//sd-uhs-sdr104; // UHS SDR104 support, uncomment if your board support
-	status = "okay";
-}; */
-
 &spi0 {
 	pinctrl-0 = <&spi0_pins>;
 	pinctrl-names = "default";
@@ -758,7 +733,7 @@
 
 &ssi0 {
 	pinctrl-0 = <&ssi0_pins>;
-	pinctrl-0 = <&ssi0_pins &sound_clk_pins>;
+	//pinctrl-0 = <&ssi0_pins &sound_clk_pins>;
 	pinctrl-names = "default";
 	status = "okay";
 };
