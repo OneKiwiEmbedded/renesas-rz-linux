@@ -17,7 +17,10 @@
 		serial1 = &scif1;
 		serial2 = &scif2;
 		serial3 = &scif3;
+		i2c0 = &i2c0;
 		i2c1 = &i2c1;
+		i2c2 = &i2c2;
+		i2c3 = &i2c3;
 		mmc0 = &sdhi0;
 		mmc1 = &sdhi1;
 		ethernet0 = &eth0;
@@ -715,7 +718,7 @@
 	pinctrl-names = "default", "state_uhs";
 
 	vmmc-supply = <&reg_3p3v>;
-	vqmmc-supply = <&vccq_sdhi1>;
+	vqmmc-supply = <&reg_1p8v>;
 	bus-width = <4>;
 	sd-uhs-sdr50;
 	sd-uhs-sdr104;
