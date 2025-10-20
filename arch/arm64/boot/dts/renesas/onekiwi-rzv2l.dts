@@ -225,7 +225,7 @@
 			interrupt-parent = <&pinctrl>;
 			interrupts = <RZG2L_GPIO(43, 1) IRQ_TYPE_LEVEL_LOW>;
 			linux,code = <KEY_1>;
-			label = "USER";
+			label = "user";
 			debounce-interval = <10>;
 			wakeup-source;
 		};
@@ -234,16 +234,16 @@
 	leds {
 		compatible = "gpio-leds";
 
-		led0 {
+		led1 {
 			gpios = <&pinctrl RZG2L_GPIO(35, 0) GPIO_ACTIVE_LOW>;
-			label = "LED0";
+			label = "led1";
 			default-state = "on";
 			linux,default-trigger = "heartbeat";
 		};
 
-		led1 {
+		led2 {
 			gpios = <&pinctrl RZG2L_GPIO(35, 1) GPIO_ACTIVE_LOW>;
-			label = "LED1";
+			label = "led2";
 			default-state = "on";
 			linux,default-trigger = "heartbeat";
 		};
