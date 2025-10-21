@@ -10,7 +10,7 @@
 #include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
 #include <dt-bindings/gpio/gpio.h>
 
-#define CODEC_SGTLT5000		0
+#define CODEC_SGTLT5000		1
 
 / {
 	model = "OneKiwi RZ/V2H 8GB";
@@ -569,6 +569,14 @@
 	status = "okay";
 };
 
+&sci5 {
+	status = "disabled";
+};
+
+&sci7 {
+	status = "disabled";
+};
+
 /* eMMC */
 &sdhi0 {
 	vmmc-supply = <&reg_3p3v>;
@@ -596,6 +604,7 @@
 &sdhi2 {
 	pinctrl-0 = <&sdhi2_pins>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &spi1 {
