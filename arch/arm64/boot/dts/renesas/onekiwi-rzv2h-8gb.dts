@@ -178,6 +178,16 @@
 		compatible = "simple-audio-card";
 		simple-audio-card,name = "rsnd_rzv2h";
 		status="okay";
+		simple-audio-card,widgets =
+			"Headphone", "Headphone Jack",
+			"Microphone", "Mic Jack",
+			"Line", "Line In",
+			"Line", "Line Out";
+		simple-audio-card,routing =
+			"Headphone Jack", "HP_OUT",
+			"LINE_OUT", "Line Out",
+			"Mic Jack", "MIC_IN",
+			"Line In", "LINE_IN";
 
 		ssi_link: simple-audio-card,dai-link@0 {
 			format = "i2s";
@@ -193,6 +203,7 @@
 			codec {
 #if CODEC_SGTLT5000
 				sound-dai = <&sgtl5000>;
+				system-clock-frequency = <11289600>;
 #else
 				sound-dai = <&es8388>;
 #endif
