@@ -111,7 +111,7 @@
 	};
 
 #if HDMI_ADV7535
-	hdmi_con {
+	hdmi-out {
 		compatible = "hdmi-connector";
 		label = "hdmi";
 		type = "d";
@@ -125,7 +125,7 @@
 #endif
 
 #if HDMI_LT9611
-	hdmi_con: hdmi-connector {
+	hdmi-out {
 		compatible = "hdmi-connector";
 		label = "hdmi";
 		type = "a";
@@ -358,7 +358,7 @@
 		port@1 {
 			dsi_out: endpoint {
 				remote-endpoint = <&lt9611_in>;
-				data-lanes = <1 2 3 4>;
+				data-lanes = <0 1 2 3>;
 			};
 		};
 	};
