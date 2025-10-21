@@ -191,7 +191,7 @@
 			};
 
 			codec {
-#if (CODEC_SGTLT5000)
+#if CODEC_SGTLT5000
 				sound-dai = <&sgtl5000>;
 #else
 				sound-dai = <&es8388>;
@@ -461,7 +461,7 @@
 	pinctrl-names = "default";
 	status = "okay";
 
-#if (CODEC_SGTLT5000)
+#if CODEC_SGTLT5000
 	sgtl5000: audio-codec@a {
 		compatible = "fsl,sgtl5000";
 		#sound-dai-cells = <0>;
