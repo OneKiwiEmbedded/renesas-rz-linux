@@ -12,9 +12,9 @@
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
 
-#define DSI_HDMI	1
-#define DSI_PANEL	0
-
+#define HDMI_ADV7535	0
+#define HDMI_LT9611		1
+#define PANEL_PH720128	0
 / {
 	model = "OneKiwi RZ/V2L";
 	compatible = "renesas,onekiwi-rzv2l", "renesas,r9a07g054l2", "renesas,r9a07g054";
@@ -24,6 +24,10 @@
 		serial1 = &scif1;
 		serial2 = &scif2;
 		serial3 = &scif3;
+		i2c0 = &i2c0;
+		i2c1 = &i2c1;
+		i2c2 = &i2c2;
+		i2c3 = &i2c3;
 		mmc0 = &sdhi0;
 		mmc1 = &sdhi1;
 		ethernet0 = &eth0;
@@ -106,14 +110,29 @@
 		clock-frequency = <12000000>;
 	};
 
-#if DSI_HDMI
-    hdmi-out {
+#if HDMI_ADV7535
+	hdmi_con {
 		compatible = "hdmi-connector";
+		label = "hdmi";
 		type = "d";
 
 		port {
 			hdmi_con_out: endpoint {
 				remote-endpoint = <&adv7535_out>;
+			};
+		};
+	};
+#endif
+
+#if HDMI_LT9611
+	hdmi_con: hdmi-connector {
+		compatible = "hdmi-connector";
+		label = "hdmi";
+		type = "a";
+
+		port {
+			hdmi_con_out: endpoint {
+				remote-endpoint = <&lt9611_out>;
 			};
 		};
 	};
@@ -323,7 +342,7 @@
 	#address-cells = <1>;
 	#size-cells = <0>;
 
-#if DSI_HDMI
+#if HDMI_ADV7535
 	ports {
 		port@1 {
 			dsi_out: endpoint {
@@ -333,6 +352,18 @@
 		};
 	};
 #endif
+
+#if HDMI_LT9611
+	ports {
+		port@1 {
+			dsi_out: endpoint {
+				remote-endpoint = <&lt9611_in>;
+				data-lanes = <1 2 3 4>;
+			};
+		};
+	};
+#endif
+
 	/*
 	panel@0 {
 		status = "okay";
@@ -349,7 +380,7 @@
 		};
 	};*/
 
-#if DSI_PANEL
+#if PANEL_PH720128
 	ports {
 		port@1 {
 			dsi_out: endpoint {
@@ -453,7 +484,7 @@
 	pinctrl-names = "default";
 	status = "okay";
 
-#if DSI_HDMI
+#if HDMI_ADV7535
 	adv7535: hdmi@3d {
 		compatible = "adi,adv7535";
 		reg = <0x3d>;
@@ -491,7 +522,39 @@
 	};
 #endif
 
-#if DSI_PANEL
+#if HDMI_LT9611
+	lt9611: hdmi-bridge@3b {
+		compatible = "lontium,lt9611";
+		reg = <0x3b>;
+		reset-gpios = <&pinctrl RZG2L_GPIO(43, 3) GPIO_ACTIVE_HIGH>;
+		interrupts-extended = <&pinctrl RZG2L_GPIO(1, 1) IRQ_TYPE_EDGE_FALLING>;
+
+		//reset-gpios = <&pinctrl RZG2L_GPIO(43, 3) GPIO_ACTIVE_LOW>;
+		//interrupts = <&pinctrl RZG2L_GPIO(1, 1) GPIO_ACTIVE_LOW>;
+
+		vdd-supply = <&reg_1p8v>;
+		vcc-supply = <&reg_3p3v>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			port@0 {
+				reg = <0>;
+				lt9611_in: endpoint {
+					remote-endpoint = <&dsi_out>;
+				};
+			};
+			port@1 {
+				reg = <1>;
+				lt9611_out: endpoint {
+					remote-endpoint = <&hdmi_con_out>;
+				};
+			};
+		};
+	};
+#endif
+
+#if PANEL_PH720128
 	gt911: gt911_ts@14 {
 		compatible = "goodix,gt911";
 		reg = <0x14>;
@@ -652,7 +715,7 @@
 	status = "okay";
 };
 
-/* eMMC controller configuration */
+/* eMMC */
 &sdhi0 {
 	pinctrl-names = "default", "state_uhs";
 	pinctrl-0 = <&sdhi0_emmc_pins>;
@@ -661,24 +724,23 @@
 	vmmc-supply = <&reg_3p3v>;
 	vqmmc-supply = <&reg_1p8v>;
 	bus-width = <8>;
-	//mmc-hs200-1_8v; /* HS200 mode at 1.8V support, uncomment if your board support */
+	mmc-hs200-1_8v;
 	non-removable;
 	fixed-emmc-driver-type = <1>;
 	status = "okay";
 };
 
-/* SD Card controller configuration */
+/* microSD */
 &sdhi1 {
 	pinctrl-0 = <&sdhi1_pins>;
-	pinctrl-names = "default";
-	//pinctrl-1 = <&sdhi1_pins_uhs>;
-	//pinctrl-names = "default", "state_uhs";
+	pinctrl-1 = <&sdhi1_pins_uhs>;
+	pinctrl-names = "default", "state_uhs";
 
 	vmmc-supply = <&reg_3p3v>;
-	//vqmmc-supply = <&vccq_sdhi1>;
+	vqmmc-supply = <&reg_1p8v>;
 	bus-width = <4>;
-	//sd-uhs-sdr50; /* UHS SDR50 support, uncomment if your board support */
-	//sd-uhs-sdr104; /* UHS SDR104 support, uncomment if your board support */
+	sd-uhs-sdr50;
+	sd-uhs-sdr104;
 	status = "okay";
 };
 
@@ -700,7 +762,6 @@
 
 &ssi0 {
 	pinctrl-0 = <&ssi0_pins>;
-	pinctrl-0 = <&ssi0_pins &sound_clk_pins>;
 	pinctrl-names = "default";
 	status = "okay";
 };
