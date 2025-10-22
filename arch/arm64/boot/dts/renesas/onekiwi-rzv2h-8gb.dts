@@ -2,13 +2,14 @@
 /*
  * Device Tree Source for the OneKiw RZ/V2H SOM board
  *
- * Copyright (C) 2024 Renesas Electronics Corp.
+ * Copyright (C) 2025 OneKiwi Technology Co., Ltd
  */
 
 /dts-v1/;
 #include "onekiwi-r9a09g057.dtsi"
-#include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
 
 #define CODEC_SGTLT5000		0
 
@@ -234,6 +235,7 @@
 			};
 		};
 	};
+
 
 	gpio-keys {
 		compatible = "gpio-keys";
