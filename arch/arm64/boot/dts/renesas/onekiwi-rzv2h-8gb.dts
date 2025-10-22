@@ -164,7 +164,6 @@
 		clock-frequency = <11289600>;
 	};
 
-
 	clk_audio_12m288: x12m288 {
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
@@ -215,6 +214,7 @@
 				system-clock-frequency = <11289600>;
 #else
 				sound-dai = <&es8388>;
+				system-clock-frequency = <11289600>;
 #endif
 				clocks = <&rcar_sound>;
 			};
@@ -499,21 +499,21 @@
 	};
 #else
 	es8388: audio-codec@10 {
-        compatible = "everest,es8388";
+		compatible = "everest,es8388";
 		#sound-dai-cells = <0>;
-		#address-cells = <1>;
-		#size-cells = <0>;
-        reg = <0x10>;
+		//#address-cells = <1>;
+		//#size-cells = <0>;
+		reg = <0x10>;
 
-        AVDD-supply  = <&reg_3p3v>;
-        DVDD-supply  = <&reg_1p8v>;
-        PVDD-supply  = <&reg_3p3v>;
-        IPVDD-supply = <&reg_3p3v>;
+		AVDD-supply  = <&reg_3p3v>;
+		DVDD-supply  = <&reg_1p8v>;
+		PVDD-supply  = <&reg_3p3v>;
+		HPVDD-supply = <&reg_3p3v>;
 
-        clocks = <&clk_ext_audio>;
-        clock-names = "mclk";
+		clocks = <&clk_ext_audio>;
+		//clock-names = "mclk";
 
-        status = "okay";
+		status = "okay";
     };
 #endif
 };
