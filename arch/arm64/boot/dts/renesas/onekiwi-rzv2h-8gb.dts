@@ -498,10 +498,10 @@
 		VDDD-supply = <&reg_1p8v>;
 	};
 #else
-	es8388: audio-codec@10 {
+	es8388: audio-codec@11 {
 		compatible = "everest,es8388";
 		#sound-dai-cells = <0>;
-		reg = <0x10>;
+		reg = <0x11>;
 
 		AVDD-supply  = <&reg_1p8v>;
 		DVDD-supply  = <&reg_1p8v>;
