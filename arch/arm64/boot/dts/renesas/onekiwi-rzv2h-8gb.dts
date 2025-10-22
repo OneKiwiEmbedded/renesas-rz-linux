@@ -171,13 +171,13 @@
 		clock-frequency = <12288000>;
 	};
 
-
 	snd_rzv2h: sound {
 		#address-cells = <1>;
 		#size-cells = <0>;
 		compatible = "simple-audio-card";
 		simple-audio-card,name = "rsnd_rzv2h";
 		status="okay";
+#if CODEC_SGTLT5000
 		simple-audio-card,widgets =
 			"Headphone", "Headphone Jack",
 			"Microphone", "Mic Jack",
@@ -188,7 +188,16 @@
 			"LINE_OUT", "Line Out",
 			"Mic Jack", "MIC_IN",
 			"Line In", "LINE_IN";
-
+#else
+		simple-audio-card,widgets =
+			"Headphone", "Headphone Jack",
+			"Microphone", "Mic Jack";
+		simple-audio-card,routing =
+			"Headphone Jack",	"LOUT1",
+			"Headphone Jack",	"ROUT1",
+			"LINPUT1", "Mic Jack",
+			"RINPUT1", "Mic Jack";
+#endif
 		ssi_link: simple-audio-card,dai-link@0 {
 			format = "i2s";
 			reg = <0>;
@@ -480,7 +489,8 @@
 		#size-cells = <0>;
 		reg = <0xa>;
 
-		clocks = <&rcar_sound>;
+		//clocks = <&rcar_sound>;
+		clocks = <&clk_ext_audio>;
 		clock-names = "mclk";
 
 		VDDA-supply = <&reg_3p3v>;
@@ -490,6 +500,9 @@
 #else
 	es8388: audio-codec@10 {
         compatible = "everest,es8388";
+		#sound-dai-cells = <0>;
+		#address-cells = <1>;
+		#size-cells = <0>;
         reg = <0x10>;
 
         AVDD-supply  = <&reg_3p3v>;
@@ -497,12 +510,9 @@
         PVDD-supply  = <&reg_3p3v>;
         IPVDD-supply = <&reg_3p3v>;
 
-        clocks = <&clk_audio_12m288>;
+        clocks = <&clk_ext_audio>;
         clock-names = "mclk";
 
-        //reset-gpios = <&gpioX Y GPIO_ACTIVE_LOW>;
-
-        #sound-dai-cells = <0>;
         status = "okay";
     };
 #endif
