@@ -20,7 +20,8 @@
 	aliases {
 		serial0 = &scif0;
 		serial1 = &sci0;
-		serial2 = &sci3;
+		serial2 = &sci2;
+		serial3 = &sci3;
 		i2c1 = &i2c1;
 		i2c4 = &i2c4;
 		i2c5 = &i2c5;
@@ -236,7 +237,6 @@
 		};
 	};
 
-
 	gpio-keys {
 		compatible = "gpio-keys";
 		pinctrl-names = "default";
@@ -267,6 +267,12 @@
 			default-state = "on";
 			linux,default-trigger = "heartbeat";
 		};
+	};
+
+	pwrseq_wifi: pwrseq_wifi {
+		compatible = "mmc-pwrseq-simple";
+		reset-gpios = <&pinctrl RZG2L_GPIO(0, 4) GPIO_ACTIVE_HIGH>;
+		post-power-on-delay-ms = <200>;
 	};
 };
 
@@ -454,6 +460,24 @@
 	pinctrl-0 = <&i2c5_pins>;
 	pinctrl-names = "default";
 	status = "okay";
+};
+
+&i2c6 {
+	pinctrl-0 = <&i2c6_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&i2c7 {
+	pinctrl-0 = <&i2c7_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&i2c8 {
+	pinctrl-0 = <&i2c8_pins>;
+	pinctrl-names = "default";
+	status = "okay";
 
 	adv7535: hdmi@3d {
 		compatible = "adi,adv7535";
@@ -490,24 +514,6 @@
 			};
 		};
 	};
-};
-
-&i2c6 {
-	pinctrl-0 = <&i2c6_pins>;
-	pinctrl-names = "default";
-	status = "okay";
-};
-
-&i2c7 {
-	pinctrl-0 = <&i2c7_pins>;
-	pinctrl-names = "default";
-	status = "okay";
-};
-
-&i2c8 {
-	pinctrl-0 = <&i2c8_pins>;
-	pinctrl-names = "default";
-	status = "okay";
 
 #if CODEC_SGTLT5000
 	sgtl5000: audio-codec@a {
@@ -600,14 +606,32 @@
 };
 
 &sci0 {
-	pinctrl-0 = <&uart0_pins>;
+	pinctrl-0 = <&sci0_pins>;
 	pinctrl-names = "default";
 	uart-has-rtscts;
 	status = "okay";
 };
 
+&sci2 {
+	pinctrl-0 = <&sci2_pins>;
+	pinctrl-names = "default";
+	uart-has-rtscts;
+	status = "okay";
+
+	bluetooth@0 {
+		compatible = "brcm,bcm43438-bt";
+		max-speed = <3000000>;
+		/* BT_REG_ON / BT_WAKE / BT_HOST_WAKE của module */
+		shutdown-gpios       = <&pinctrl RZG2L_GPIO(0, 1) GPIO_ACTIVE_HIGH>; /* BT_RST */
+		//device-wakeup-gpios  = <&pinctrl RZG2L_GPIO(<PORT>, <PIN>) GPIO_ACTIVE_HIGH>;
+		//host-wakeup-gpios    = <&pinctrl RZG2L_GPIO(<PORT>, <PIN>) GPIO_ACTIVE_HIGH>;
+		//clocks = <&clk_32k>;
+		//clock-names = "lpo";
+	};
+};
+
 &sci3 {
-	pinctrl-0 = <&uart3_pins>;
+	pinctrl-0 = <&sci3_pins>;
 	pinctrl-names = "default";
 	uart-has-rtscts;
 	status = "okay";
@@ -649,12 +673,45 @@
 	pinctrl-0 = <&sdhi2_pins>;
 	pinctrl-names = "default";
 	status = "okay";
+	bus-width = <4>;
+	disable-wp;
+	no-mmc;
+	no-sd;
+	non-removable;                /* module hàn cố định */
+	keep-power-in-suspend;        /* giữ nguồn khi suspend */
+	cap-sdio-irq;                 /* cho phép SDIO IRQ (host-wake) */
+	wakeup-source;                /* cho phép đánh thức hệ thống */
+
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	vmmc-supply  = <&reg_3p3v>;
+	vqmmc-supply = <&reg_1p8v>;
+	mmc-pwrseq   = <&pwrseq_wifi>;
+
+	brcmf: wifi@1 {
+		reg = <1>;
+		compatible = "brcm,bcm4329-fmac";   /* dùng chung cho họ BCM4343x/CYW433xx */
+		//interrupt-parent = <&pinctrl>;
+		/* WL_HOST_WAKE → GPIO host, mức active tuỳ thiết kế (thường HIGH) */
+		interrupts = <&pinctrl RZG2L_GPIO(0, 3) IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "host-wake";
+		wakeup-source;
+	};
 };
 
 &spi1 {
 	pinctrl-0 = <&spi1_pins>;
 	pinctrl-names = "default";
 	status = "okay";
+
+	spidev@0{
+		#address-cellss=<1>;
+		#size-cells=<1>;
+		compatible = "rohm,dh2228fv";
+		spi-max-frequency = <80000000>;
+		reg = <0>;
+	};
 };
 
 &ssi2 {
@@ -791,6 +848,27 @@
 		pins =  "SCIF_RXD", "SCIF_TXD";
 	};
 
+	sci0_pins: sci0 {
+		pinmux = <RZG2L_PORT_PINMUX(5,2,4)>, /* UART0_CTS */
+				 <RZG2L_PORT_PINMUX(5,1,1)>, /* UART0_RXD */
+				 <RZG2L_PORT_PINMUX(5,3,2)>, /* UART0_RTS */
+				 <RZG2L_PORT_PINMUX(5,0,1)>; /* UART0_TXD */
+	};
+
+	sci2_pins: sci2 {
+		pinmux = <RZG2L_PORT_PINMUX(5,6,4)>, /* UART2_CTS */
+				 <RZG2L_PORT_PINMUX(5,5,1)>, /* UART2_RXD */
+				 <RZG2L_PORT_PINMUX(5,7,2)>, /* UART2_RTS */
+				 <RZG2L_PORT_PINMUX(5,4,1)>; /* UART2_TXD */
+	};
+
+	sci3_pins: sci3 {
+		pinmux = <RZG2L_PORT_PINMUX(3,6,4)>, /* CTS3N */
+				 <RZG2L_PORT_PINMUX(3,5,2)>, /* RXD3_MISO3_SCL3 */
+				 <RZG2L_PORT_PINMUX(3,7,2)>, /* SS3_CTS3N_RTS3N */
+				 <RZG2L_PORT_PINMUX(3,4,2)>; /* TXD3_MOSI3_SDA3 */
+	};
+
 	sdhi1_pins: sd1 {
 		sd1_mux {
 			pinmux = <RZG2L_PORT_PINMUX(9, 4, 14)>; /* SD1_CD */
@@ -824,20 +902,6 @@
 				 <RZG2L_PORT_PINMUX(9,0,1)>, /* MOSIA */
 				 <RZG2L_PORT_PINMUX(9,2,1)>, /* RSPCKA */
 				 <RZG2L_PORT_PINMUX(9,3,1)>; /* SSLA0 */
-	};
-
-	uart0_pins: uart0 {
-		pinmux = <RZG2L_PORT_PINMUX(5,2,4)>, /* UART0_CTS */
-				 <RZG2L_PORT_PINMUX(5,1,1)>, /* UART0_RXD */
-				 <RZG2L_PORT_PINMUX(5,3,2)>, /* UART0_RTS */
-				 <RZG2L_PORT_PINMUX(5,0,1)>; /* UART0_TXD */
-	};
-
-	uart3_pins: uart3 {
-		pinmux = <RZG2L_PORT_PINMUX(3,6,4)>, /* CTS3N */
-				 <RZG2L_PORT_PINMUX(3,5,2)>, /* RXD3_MISO3_SCL3 */
-				 <RZG2L_PORT_PINMUX(3,7,2)>, /* SS3_CTS3N_RTS3N */
-				 <RZG2L_PORT_PINMUX(3,4,2)>; /* TXD3_MOSI3_SDA3 */
 	};
 
 	usb20_pins: usb20 {
