@@ -19,7 +19,7 @@
 	aliases {
 		serial0 = &scif0;
 		serial1 = &sci0;
-        serial2 = &sci3;
+		serial2 = &sci3;
 		i2c1 = &i2c1;
 		i2c4 = &i2c4;
 		i2c5 = &i2c5;
@@ -115,6 +115,15 @@
 		compatible = "renesas,vspm_if";
 	};
 
+	udmabuf@0 {
+		compatible = "ikwzm,u-dma-buf";
+		device-name = "udmabuf0";
+		minor-number = <0>;
+		size = <0x4000000>; // 64MiB
+		dma-coherent;
+		memory-region = <&image_buf0>;
+	};
+
 	reg_1p8v: regulator0 {
 		compatible = "regulator-fixed";
 		regulator-name = "fixed-1.8V";
@@ -162,12 +171,6 @@
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
 		clock-frequency = <11289600>;
-	};
-
-	clk_audio_12m288: x12m288 {
-		compatible = "fixed-clock";
-		#clock-cells = <0>;
-		clock-frequency = <12288000>;
 	};
 
 	snd_rzv2h: sound {
@@ -232,13 +235,36 @@
 		};
 	};
 
-	udmabuf@0 {
-		compatible = "ikwzm,u-dma-buf";
-		device-name = "udmabuf0";
-		minor-number = <0>;
-		size = <0x4000000>; // 64MiB
-		dma-coherent;
-		memory-region = <&image_buf0>;
+	gpio-keys {
+		compatible = "gpio-keys";
+		pinctrl-names = "default";
+
+		user {
+			interrupt-parent = <&pinctrl>;
+			interrupts = <RZG2L_GPIO(10, 7) IRQ_TYPE_LEVEL_LOW>;
+			linux,code = <KEY_1>;
+			label = "user";
+			debounce-interval = <10>;
+			wakeup-source;
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		led1 {
+			gpios = <&pinctrl RZG2L_GPIO(10, 1) GPIO_ACTIVE_LOW>;
+			label = "led1";
+			default-state = "on";
+			linux,default-trigger = "heartbeat";
+		};
+
+		led2 {
+			gpios = <&pinctrl RZG2L_GPIO(10, 6) GPIO_ACTIVE_LOW>;
+			label = "led2";
+			default-state = "on";
+			linux,default-trigger = "heartbeat";
+		};
 	};
 };
 
@@ -511,7 +537,7 @@
 		clocks = <&clk_ext_audio>;
 		//clock-names = "mclk";
 		status = "okay";
-    };
+	};
 #endif
 };
 
@@ -574,7 +600,6 @@
 &sci0 {
 	pinctrl-0 = <&uart0_pins>;
 	pinctrl-names = "default";
-
 	uart-has-rtscts;
 	status = "okay";
 };
@@ -582,7 +607,6 @@
 &sci3 {
 	pinctrl-0 = <&uart3_pins>;
 	pinctrl-names = "default";
-
 	uart-has-rtscts;
 	status = "okay";
 };
@@ -611,8 +635,8 @@
 	pinctrl-0 = <&sdhi1_pins>;
 	pinctrl-names = "default";
 	vmmc-supply = <&vmmc_sdhi1>;
-	vqmmc-supply = <&vccq_sdhi1>;
-	//vqmmc-supply = <&reg_1p8v>;
+	//vqmmc-supply = <&vccq_sdhi1>;
+	vqmmc-supply = <&reg_1p8v>;
 	bus-width = <4>;
 	sd-uhs-sdr50;
 	sd-uhs-sdr104;
