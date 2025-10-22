@@ -10,7 +10,7 @@
 #include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
 #include <dt-bindings/gpio/gpio.h>
 
-#define CODEC_SGTLT5000		1
+#define CODEC_SGTLT5000		0
 
 / {
 	model = "OneKiwi RZ/V2H 8GB";
