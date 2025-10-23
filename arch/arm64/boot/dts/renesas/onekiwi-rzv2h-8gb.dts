@@ -695,7 +695,8 @@
 		compatible = "brcm,bcm43438-bt";
 		max-speed = <3000000>;
 		/* BT_REG_ON / BT_WAKE / BT_HOST_WAKE của module */
-		shutdown-gpios       = <&pinctrl RZG2L_GPIO(0, 1) GPIO_ACTIVE_HIGH>; /* BT_RST */
+		reset-gpios = <&pinctrl RZG2L_GPIO(0, 1) GPIO_ACTIVE_HIGH>;  /* BT_RST_N */
+		//shutdown-gpios = <&pinctrl RZG2L_GPIO(0, 1) GPIO_ACTIVE_HIGH>; /* BT_RST */
 		//device-wakeup-gpios  = <&pinctrl RZG2L_GPIO(<PORT>, <PIN>) GPIO_ACTIVE_HIGH>;
 		//host-wakeup-gpios    = <&pinctrl RZG2L_GPIO(<PORT>, <PIN>) GPIO_ACTIVE_HIGH>;
 		//clocks = <&clk_32k>;
@@ -762,7 +763,7 @@
 	#address-cells = <1>;
 	#size-cells = <0>;
 
-	vmmc-supply  = <&reg_3p3v>;
+	vmmc-supply  = <&reg_1p8v>;
 	vqmmc-supply = <&reg_1p8v>;
 	mmc-pwrseq   = <&pwrseq_wifi>;
 
