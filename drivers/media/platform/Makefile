@@ -62,6 +62,7 @@ obj-$(CONFIG_VIDEO_XILINX)		+= xilinx/
 
 obj-$(CONFIG_VIDEO_RCAR_VIN)		+= rcar-vin/
 obj-$(CONFIG_VIDEO_RZG2L_CRU)		+= rzg2l-cru/
+obj-$(CONFIG_VIDEO_RZV2H_IVC)		+= rzv2h-ivc/
 
 obj-$(CONFIG_VIDEO_ATMEL_ISC)		+= atmel/
 obj-$(CONFIG_VIDEO_ATMEL_ISI)		+= atmel/

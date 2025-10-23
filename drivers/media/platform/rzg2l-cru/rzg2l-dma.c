@@ -15,6 +15,12 @@
 #include <media/videobuf2-dma-contig.h>
 
 #include "rzg2l-cru.h"
+#include <media/rzg2l-sensor-settings.h>
+
+static int retry_count;
+module_param(retry_count, int, 0644);
+static int auto_recovery = 1;
+module_param(auto_recovery, int, 0644);
 
 /* CRU Control Register */
 #define CRUnCTRL_VINSEL(x)		((x) << 0)
@@ -195,6 +201,29 @@ struct rzg2l_cru_buffer {
 	struct list_head list;
 };
 
+/**
+ * struct image_conv_settings - register settings for rzg2l image converter
+ */
+struct image_conv_settings {
+	int SLPrC, ELPrC, SPPrC, EPPrC;
+};
+
+#ifdef CONFIG_VIDEO_RZG2L_CRU_IMAGE_PROCESSOR
+/*
+ * @brief	Calculate image converter settings from pixel area settings for sensor
+ * @param	[out]cv pointer to image converter settings
+ * @param	[in]cv pointer to pixel area settings
+ */
+static void pixel_area_to_image_conv_settings(struct image_conv_settings *cv, const struct rzg2l_sensor_settings *a)
+{
+	cv->SLPrC = a->pixel_area.vertical.dummy_0 + a->pixel_area.vertical.ignored_area_of_effective_pixel_0 + a->pixel_area.vertical.effective_margin_for_color_processing_0 + 1;
+	cv->ELPrC = cv->SLPrC + a->pixel_area.vertical.recording_pixel_area - 1;
+	cv->SPPrC = a->pixel_area.horizontal.dummy_0 + a->pixel_area.horizontal.ignored_area_of_effective_pixel_0 + a->pixel_area.horizontal.effective_margin_for_color_processing_0 + 1;
+	cv->EPPrC = cv->SPPrC + a->pixel_area.horizontal.recording_pixel_area - 1;
+//	printk("pixel_area_to_image_conv_settings: %d %d %d %d\n", cv->SLPrC, cv->ELPrC, cv->SPPrC, cv->EPPrC);
+}
+#endif
+
 static int sensor_stop_try[CRU_CHANNEL_MAX];
 static int prev_slot[CRU_CHANNEL_MAX];
 static int frame_skip[CRU_CHANNEL_MAX];
@@ -204,6 +233,16 @@ static u32 amnmbxaddrh[CRU_CHANNEL_MAX][HW_BUFFER_MAX];
 #define to_buf_list(vb2_buffer) (&container_of(vb2_buffer, \
 						struct rzg2l_cru_buffer, \
 						vb)->list)
+
+/*
+ * @brief	Calculate image size multiplied by exposure
+ * @param	[in] cru pointer to cru structure
+ * @return  image size in bytes
+ */
+static u32 rzg2l_cru_get_sizeimage(struct rzg2l_cru_dev *cru)
+{
+	return cru->format.sizeimage * cru->exposure;
+}
 
 static void rzg2l_cru_write(struct rzg2l_cru_dev *cru, u32 offset, u32 value)
 {
@@ -219,9 +258,19 @@ static void rzg2l_cru_set_mb(struct rzg2l_cru_dev *cru,
 			     u32 bank, u32 low, u32 high)
 {
 	iowrite32(low,
-		  cru->base + cru->info->regs[AMnMB1ADDRL].offset + bank * 8);
+		  cru->base + cru->info->regs[AMnMB1ADDRL].offset + (bank) * 8);
 	iowrite32(high,
-		  cru->base + cru->info->regs[AMnMB1ADDRH].offset + bank * 8);
+		  cru->base + cru->info->regs[AMnMB1ADDRH].offset + (bank) * 8);
+#ifndef CONFIG_VIDEO_RZG2L_CRU_IMAGE_PROCESSOR
+	{
+		dma_addr_t addr = (((dma_addr_t)high << 32) | low) + rzg2l_cru_get_sizeimage(cru);
+
+		iowrite32(lower_32_bits(addr),
+			  cru->base + cru->info->regs[AMnIVT0ADDRL].offset + (bank + 1) * 8);
+		iowrite32(upper_32_bits(addr),
+			  cru->base + cru->info->regs[AMnIVT0ADDRH].offset + (bank + 1) * 8);
+	}
+#endif
 }
 
 static void rzg2l_cru_get_mb(struct rzg2l_cru_dev *cru,
@@ -263,10 +312,10 @@ static int rzg2l_cru_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 
 	/* Make sure the image size is large enough. */
 	if (*nplanes)
-		return sizes[0] < cru->format.sizeimage ? -EINVAL : 0;
+		return sizes[0] < rzg2l_cru_get_sizeimage(cru) ? -EINVAL : 0;
 
 	*nplanes = 1;
-	sizes[0] = cru->format.sizeimage;
+	sizes[0] = rzg2l_cru_get_sizeimage(cru);
 
 	return 0;
 };
@@ -274,7 +323,7 @@ static int rzg2l_cru_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 static int rzg2l_cru_buffer_prepare(struct vb2_buffer *vb)
 {
 	struct rzg2l_cru_dev *cru = vb2_get_drv_priv(vb->vb2_queue);
-	unsigned long size = cru->format.sizeimage;
+	unsigned long size = rzg2l_cru_get_sizeimage(cru);
 
 	if (vb2_plane_size(vb, 0) < size) {
 		cru_err(cru, "buffer too small (%lu < %lu)\n",
@@ -403,9 +452,9 @@ static void rzg2l_cru_set_slot_addr(struct rzg2l_cru_dev *cru,
 	 * There is no HW support for composition do the beast we can
 	 * by modifying the buffer offset
 	 */
-	offsetx = cru->compose.left * fmt->bpp;
+	offsetx = cru->compose.left * fmt->bpp / (fmt->bpp_denominator_minus1 + 1);
 	offsety = cru->compose.top * cru->format.bytesperline;
-	offset = addr + offsetx + offsety;
+	offset = addr + (offsetx + offsety) * cru->exposure;
 
 	/*
 	 * The address needs to be 512 bytes aligned. Driver should never accept
@@ -435,9 +484,10 @@ static void rzg2l_cru_fill_hw_slot(struct rzg2l_cru_dev *cru, int slot)
 	if (WARN_ON(cru->queue_buf[slot] != NULL))
 		return;
 
-	cru_dbg(cru, "Filling HW slot: %d\n", slot);
+	// cru_dbg(cru, "Filling HW slot: %d\n", slot);
 
 	if (list_empty(&cru->buf_list)) {
+		cru_dbg(cru, "No buf in queue. Use scratch %#llx for slot[%d]", cru->scratch_phys, slot);
 		cru->queue_buf[slot] = NULL;
 		phys_addr = cru->scratch_phys;
 	} else {
@@ -447,6 +497,7 @@ static void rzg2l_cru_fill_hw_slot(struct rzg2l_cru_dev *cru, int slot)
 		vbuf = &buf->vb;
 		list_del_init(to_buf_list(vbuf));
 		cru->queue_buf[slot] = vbuf;
+		cru_dbg(cru, "Filling HW slot[%d] = vbuf idx#%d", slot, vbuf->vb2_buf.index);
 
 		/* Setup DMA */
 		phys_addr = vb2_dma_contig_plane_dma_addr(&vbuf->vb2_buf, 0);
@@ -456,6 +507,7 @@ static void rzg2l_cru_fill_hw_slot(struct rzg2l_cru_dev *cru, int slot)
 
 	rzg2l_cru_get_mb(cru, slot, &amnmbxaddrl[cru->id][slot],
 			 &amnmbxaddrh[cru->id][slot]);
+	cru->last_filled_slot = slot;
 }
 
 static int rzg2l_cru_initialize_axi(struct rzg2l_cru_dev *cru)
@@ -502,10 +554,11 @@ static void rzg2l_cru_csi2_setup(struct rzg2l_cru_dev *cru)
 {
 	u32 icnmc, icnmc_regs;
 
-	/* Currently enable only 1 SVC0 channel */
-	if (cru->info->type == RZ_CRU_V2H)
-		rzg2l_cru_write(cru, ICnSVCNUM, ICnSVCNUM_SVCNUM(1));
-
+	if (cru->info->type == RZ_CRU_V2H) {
+		rzg2l_cru_write(cru, ICnSVCNUM, ICnSVCNUM_SVCNUM(cru->exposure));
+		rzg2l_cru_write(cru, AMnSVCAOFL, cru->format.sizeimage);
+		rzg2l_cru_write(cru, AMnSVCAOFH, 0);
+	}
 	/*
 	 * Input interface
 	 */
@@ -583,11 +636,13 @@ static void rzg2l_cru_csi2_setup(struct rzg2l_cru_dev *cru)
 	if (cru->info->type == RZ_CRU_G2L)
 		icnmc |= ICnMC_VCSEL(cru->group->csi.channel);
 	else
-		rzg2l_cru_write(cru, ICnSVC, ICnSVC_SVC0(0) | ICnSVC_SVC1(1) |
-				ICnSVC_SVC2(2) | ICnSVC_SVC3(3));
+		rzg2l_cru_write(cru, ICnSVC, cru->sensor_settings.is_hdr ?
+			ICnSVC_SVC0(1) | ICnSVC_SVC1(0) | ICnSVC_SVC2(2) | ICnSVC_SVC3(3) :
+			ICnSVC_SVC0(0) | ICnSVC_SVC1(1) | ICnSVC_SVC2(2) | ICnSVC_SVC3(3));
 
 	rzg2l_cru_write(cru, icnmc_regs, icnmc);
-
+	if (cru->info->type != RZ_CRU_G2L && cru->exposure == 2)
+		rzg2l_cru_write(cru, ICnIPMC_C1, icnmc);
 }
 
 static void rzg2l_cru_parallel_setup(struct rzg2l_cru_dev *cru)
@@ -685,7 +740,7 @@ static void rzg2l_cru_parallel_setup(struct rzg2l_cru_dev *cru)
 
 static int rzg2l_cru_initialize_image_conv(struct rzg2l_cru_dev *cru)
 {
-	u32 icndmr, icnmc_regs;
+	u32 icndmr, icnmc_regs, icnmc_value;
 
 	/* Currently we do not support:
 	 * - Frame subsampling
@@ -787,22 +842,72 @@ static int rzg2l_cru_initialize_image_conv(struct rzg2l_cru_dev *cru)
 	}
 
 	icnmc_regs = (cru->info->type == RZ_CRU_G2L) ? ICnMC : ICnIPMC_C0;
+	icnmc_value = rzg2l_cru_read(cru, icnmc_regs);
+
+	icnmc_value |= ICnMC_CSCTHR;
+	icnmc_value &= ~ICnMC_CLPTHR;
+
+	if (cru->info->type == RZ_CRU_V2H) {
+		rzg2l_cru_write(cru, ICnDTVP, 0x00000000); // no header, no footer
+#ifdef CONFIG_VIDEO_RZG2L_CRU_IMAGE_PROCESSOR
+		rzg2l_cru_write(cru, ICnNIPDT_C0L, 0x00000000);
+		rzg2l_cru_write(cru, ICnNIPDT_C0H, 0x00000000);
+		if (cru->exposure == 2) {
+			rzg2l_cru_write(cru, ICnNIPDT_C1L, 0x00000000);
+			rzg2l_cru_write(cru, ICnNIPDT_C1H, 0x00000000);
+		}
+		{
+			struct image_conv_settings ic;
+
+			pixel_area_to_image_conv_settings(&ic, &cru->sensor_settings);
+			rzg2l_cru_write(cru, ICnSLPrC_C0, ic.SLPrC);
+			if (cru->exposure == 2)
+				rzg2l_cru_write(cru, ICnSLPrC_C1, ic.SLPrC);
+			rzg2l_cru_write(cru, ICnELPrC_C0, ic.ELPrC);
+			if (cru->exposure == 2)
+				rzg2l_cru_write(cru, ICnELPrC_C1, ic.ELPrC);
+			rzg2l_cru_write(cru, ICnSPPrC_C0, ic.SPPrC);
+			if (cru->exposure == 2)
+				rzg2l_cru_write(cru, ICnSPPrC_C1, ic.SPPrC);
+			rzg2l_cru_write(cru, ICnEPPrC_C0, ic.EPPrC);
+			if (cru->exposure == 2)
+				rzg2l_cru_write(cru, ICnEPPrC_C1, ic.EPPrC);
+		}
+#else
+		{
+			int dtype = rzg2l_cru_format_from_pixel(cru->format.pixelformat)->dtype;
+			uint32_t nipdt_l = dtype < 32 ? (1 << dtype) : 0;
+			uint32_t nipdt_h = dtype >= 32 ? (1 << (dtype - 32)) : 0;
+#ifdef CONFIG_VIDEO_RZG2L_CRU_EMBEDDED_DATA
+			nipdt_l = 1 << 0x12;
+#endif
+			rzg2l_cru_write(cru, ICnNIPDT_C0L, nipdt_l);
+			rzg2l_cru_write(cru, ICnNIPDT_C0H, nipdt_h);
+			if (cru->exposure == 2) {
+				rzg2l_cru_write(cru, ICnNIPDT_C1L, nipdt_l);
+				rzg2l_cru_write(cru, ICnNIPDT_C1H, nipdt_h);
+			}
+		}
+#endif
+	}
+
 	/*
 	 * CRU can perform colorspace conversion: YUV <=> RGB.
 	 * If other formats, do bypass mode.
 	 */
 	if (cru->output_fmt == cru->input_fmt)
-		rzg2l_cru_write(cru, icnmc_regs,
-				rzg2l_cru_read(cru, icnmc_regs) | ICnMC_CSCTHR);
+		icnmc_value |= ICnMC_CSCTHR;
 	else if (((cru->output_fmt == YUV) && (cru->input_fmt == RGB)) ||
 		 ((cru->output_fmt == RGB) && (cru->input_fmt == YUV)))
-		rzg2l_cru_write(cru, icnmc_regs,
-				rzg2l_cru_read(cru, icnmc_regs) & (~ICnMC_CSCTHR));
+		icnmc_value &= ~ICnMC_CSCTHR;
 	else {
 		cru_err(cru, "Not support color space conversion for (0x%x)\n",
 			cru->format.pixelformat);
 		return -ENOEXEC;
 	}
+	rzg2l_cru_write(cru, icnmc_regs, icnmc_value);
+	if (cru->info->type != RZ_CRU_G2L && cru->exposure == 2)
+		rzg2l_cru_write(cru, ICnIPMC_C1, icnmc_value);
 
 	/* Set output data format */
 	rzg2l_cru_write(cru, ICnDMR, icndmr);
@@ -813,18 +918,26 @@ static int rzg2l_cru_initialize_image_conv(struct rzg2l_cru_dev *cru)
 static int rzg2l_cru_start(struct rzg2l_cru_dev *cru, struct v4l2_subdev *sd)
 {
 	int ret;
+	u32 value;
 
 	/* Select a video input */
 	if (cru->is_csi) {
 		/* Initializing DPHY */
-		ret = rzg2l_cru_init_csi_dphy(sd);
+		ret = rzg2l_cru_init_csi_dphy(sd, cru->sensor_settings.mbps);
 		if (ret)
 			return ret;
 
-		rzg2l_cru_write(cru, CRUnCTRL, CRUnCTRL_VINSEL(0));
+		value = CRUnCTRL_VINSEL(0);
 
 	} else
-		rzg2l_cru_write(cru, CRUnCTRL, CRUnCTRL_VINSEL(1));
+		value = CRUnCTRL_VINSEL(1);
+
+	/* If RZ/V2H, set Image Converter to Full Bypass */
+#ifndef CONFIG_VIDEO_RZG2L_CRU_IMAGE_PROCESSOR
+	if ((cru->info->type == RZ_CRU_V2H) && !test_pattern)
+		value |= CRUnCTRL_ATH;
+#endif
+	rzg2l_cru_write(cru, CRUnCTRL, value);
 
 	/* Cancel the software reset for image processing block */
 	rzg2l_cru_write(cru, CRUnRST, CRUnRST_VRESETN);
@@ -838,6 +951,8 @@ static int rzg2l_cru_start(struct rzg2l_cru_dev *cru, struct v4l2_subdev *sd)
 		rzg2l_cru_write(cru, CRUnIE2, 0);
 		rzg2l_cru_write(cru, CRUnINTS1, 0x80000F0F);
 		rzg2l_cru_write(cru, CRUnINTS2, 0x031F0FFF);
+		rzg2l_cru_write(cru, AMnAXIATTR, 0x0000015f);
+		rzg2l_cru_write(cru, AMnFIFO, auto_recovery ? 0 : 1); // enable auto recovery
 	}
 
 	/* Initialize the AXI master */
@@ -853,9 +968,15 @@ static int rzg2l_cru_start(struct rzg2l_cru_dev *cru, struct v4l2_subdev *sd)
 	/* Enable interrupt */
 	if (cru->info->type == RZ_CRU_G2L)
 		rzg2l_cru_write(cru, CRUnIE, CRUnIE_EFE);
-	else
+	else {
+		rzg2l_cru_write(cru, CRUnIE1, CRUnIE_FOE | CRUnIE_SLVEE | CRUnIE_DECEE);
 		/* Frame End IRQ + AXI-VD Bus Write Completion IRQ 1 */
-		rzg2l_cru_write(cru, CRUnIE2, CRUnIE2_FEE(0));
+		rzg2l_cru_write(cru, CRUnIE2, CRUnIE2_FEE(cru->exposure - 1)
+#ifndef CONFIG_VIDEO_RZG2L_CRU_IMAGE_PROCESSOR
+		| CRUnIE2_VDADRxWE(1) | CRUnIE2_VDADRxWE(2) | CRUnIE2_VDADRxWE(3) | CRUnIE2_VDADRxWE(4)
+#endif
+		);
+	}
 
 	/* Enable AXI master & image_conv reception */
 	rzg2l_cru_write(cru, ICnEN, ICnEN_ICEN);
@@ -916,7 +1037,6 @@ static int rzg2l_cru_set_stream(struct rzg2l_cru_dev *cru, int on)
 static void rzg2l_cru_stop(struct rzg2l_cru_dev *cru)
 {
 	int retries = 0;
-	u32 amnfifopntr, amnfifopntr_w, amnfifopntr_r_y, amnfifopntr_r_uv;
 	unsigned long flags;
 	u32 icnms;
 
@@ -946,7 +1066,7 @@ static void rzg2l_cru_stop(struct rzg2l_cru_dev *cru)
 
 	/* Wait until frame processing being stopped */
 	for (retries = 10; retries > 0; retries--) {
-		icnms = rzg2l_cru_read(cru, ICnMS) & ICnMS_IA(0);
+		icnms = rzg2l_cru_read(cru, ICnMS) & (ICnMS_IA(0) | ICnMS_IA(1) | ICnMS_IA(2) | ICnMS_IA(3));
 		if (!icnms)
 			break;
 
@@ -965,41 +1085,6 @@ static void rzg2l_cru_stop(struct rzg2l_cru_dev *cru)
 	/* Stop the test pattern generator if using */
 	if (test_pattern)
 		rzg2l_cru_write(cru, ICnTICTRL1, 0);
-
-	/* Wait until the FIFO becomes empty */
-	for (retries = 5; retries > 0; retries--) {
-		amnfifopntr = rzg2l_cru_read(cru, AMnFIFOPNTR);
-
-		if (cru->info->type == RZ_CRU_G2L) {
-			if (cru->format.pixelformat == V4L2_PIX_FMT_NV16) {
-				amnfifopntr_w = (amnfifopntr &
-						 AMnFIFOPNTR_FIFOWPNTR) >> 1;
-				amnfifopntr_r_uv = (amnfifopntr &
-						AMnFIFOPNTR_FIFORPNTR_UV) >> 25;
-				if (amnfifopntr_w == amnfifopntr_r_uv)
-					break;
-			} else {
-				amnfifopntr_w = amnfifopntr &
-						AMnFIFOPNTR_FIFOWPNTR;
-				amnfifopntr_r_y = (amnfifopntr &
-						AMnFIFOPNTR_FIFORPNTR_Y) >> 16;
-				if (amnfifopntr_w == amnfifopntr_r_y)
-					break;
-			}
-		} else {
-			if ((((amnfifopntr & AMnFIFOPNTR_FIFORPNTR_B1) >> 24) ==
-			    ((amnfifopntr & AMnFIFOPNTR_FIFOWPNTR_B1) >> 8)) &&
-			    (((amnfifopntr & AMnFIFOPNTR_FIFORPNTR_B0) >> 16) ==
-			    (amnfifopntr & AMnFIFOPNTR_FIFOWPNTR_B0)))
-				break;
-		}
-
-		udelay(10);
-	}
-
-	/* Notify that FIFO is not empty here */
-	if (!retries)
-		cru_err(cru, "Failed to empty FIFO\n");
 
 	/* Stop AXI bus */
 	rzg2l_cru_write(cru, AMnAXISTP, AMnAXISTP_AXI_STOP);
@@ -1051,7 +1136,7 @@ static void rzg2l_cru_stop_streaming(struct vb2_queue *vq)
 	return_all_buffers(cru, VB2_BUF_STATE_ERROR);
 
 	/* Free scratch buffer */
-	dma_free_coherent(cru->dev, cru->format.sizeimage, cru->scratch,
+	dma_free_coherent(cru->dev, rzg2l_cru_get_sizeimage(cru), cru->scratch,
 			  cru->scratch_phys);
 }
 
@@ -1069,7 +1154,7 @@ static int retry_streaming_func(void *data)
 		return -EPIPE;
 	sd = media_entity_to_v4l2_subdev(pad->entity);
 
-	while (retry < 5) {
+	while (retry < retry_count) {
 		for (i = 0; i < 10; i++) {
 			if (cru->state == RUNNING)
 				goto retry_done;
@@ -1082,12 +1167,14 @@ static int retry_streaming_func(void *data)
 		v4l2_subdev_call(sd, video, s_stream, 0);
 		rzg2l_cru_stop(cru);
 		pm_runtime_put(cru->dev);
+		cru->pm_got = false;
 
 		msleep(20);
 
 		cru->state = STARTING;
 
 		pm_runtime_get_sync(cru->dev);
+		cru->pm_got = true;
 
 		/* Release reset state */
 		reset_control_deassert(cru->rstc.presetn);
@@ -1110,8 +1197,9 @@ static int retry_streaming_func(void *data)
 		cru_info(cru, "CRU retry init: %d times", retry);
 	}
 
-	cru_err(cru, "Please retry due to no input signal after %d retries",
-		retry);
+	if (retry_count > 0)
+		cru_err(cru, "Please retry due to no input signal after %d retries",
+			retry);
 
 retry_done:
 	cru->retry_thread = NULL;
@@ -1133,7 +1221,7 @@ static int rzg2l_cru_start_streaming(struct vb2_queue *vq, unsigned int count)
 	frame_skip[cru->id] = 0;
 
 	/* Allocate scratch buffer. */
-	cru->scratch = dma_alloc_coherent(cru->dev, cru->format.sizeimage,
+	cru->scratch = dma_alloc_coherent(cru->dev, rzg2l_cru_get_sizeimage(cru),
 					  &cru->scratch_phys, GFP_KERNEL);
 	if (!cru->scratch) {
 		spin_lock_irqsave(&cru->qlock, flags);
@@ -1163,7 +1251,7 @@ static int rzg2l_cru_start_streaming(struct vb2_queue *vq, unsigned int count)
 	 * Workaround to start a thread to restart CRU processing flow
 	 * if there is no input to CRU while using MIPI CSI2.
 	 */
-	if (cru->is_csi) {
+	if (cru->is_csi && !test_pattern) {
 		cru->retry_thread = kthread_create(retry_streaming_func, cru,
 						   "CRU retry thread");
 		if (IS_ERR(cru->retry_thread)) {
@@ -1179,7 +1267,7 @@ static int rzg2l_cru_start_streaming(struct vb2_queue *vq, unsigned int count)
 
 out:
 	if (ret)
-		dma_free_coherent(cru->dev, cru->format.sizeimage, cru->scratch,
+		dma_free_coherent(cru->dev, rzg2l_cru_get_sizeimage(cru), cru->scratch,
 				  cru->scratch_phys);
 
 	return ret;
@@ -1259,14 +1347,33 @@ static const struct vb2_ops rzg2l_cru_qops = {
 	.wait_finish		= vb2_ops_wait_finish,
 };
 
+/**
+ * @brief	Set callback functions which trigger during CRU operations
+ * @param	struct rzg2l_cru_dev *cru
+ * @param struct rzg2l_cru_callbacks *ops
+ * @return 0 on success
+ */
+int rzg2l_cru_set_callbacks(struct rzg2l_cru_dev *cru, const struct rzg2l_cru_callbacks *ops)
+{
+	if (ops) {
+		cru->callbacks = *ops;
+	} else {
+		/* If NULL, unregister all callbacks */
+		memset(&cru->callbacks, 0, sizeof(struct rzg2l_cru_callbacks));
+	}
+	return 0;
+}
+EXPORT_SYMBOL_GPL(rzg2l_cru_set_callbacks);
+
+#ifdef CONFIG_VIDEO_RZG2L_CRU_IMAGE_PROCESSOR
 static irqreturn_t rzv2h_cru_irq(int irq, void *data)
 {
 	struct rzg2l_cru_dev *cru = data;
 	unsigned long flags;
-	u32 irq_status, slot;
+	u32 irq_status, i, slot;
 	unsigned int handled = 0;
 	dma_addr_t phys_addr;
-	bool write_complete;
+	bool write_complete = false;
 
 	spin_lock_irqsave(&cru->qlock, flags);
 
@@ -1288,23 +1395,29 @@ static irqreturn_t rzv2h_cru_irq(int irq, void *data)
 	phys_addr |= (((unsigned long) rzg2l_cru_read(cru, AMnMADRSH)) << 32);
 
 	/* Check current HW slot based on current MB address */
-	for (slot = 0; slot < cru->num_buf; slot++) {
+	slot = prev_slot[cru->id];
+	for (i = 0; i < cru->num_buf; i++) {
 		dma_addr_t tmp;
+
+		slot++;
+		if (slot >= cru->num_buf)
+			slot = 0;
 
 		tmp = amnmbxaddrh[cru->id][slot];
 		tmp = (tmp << 32) | amnmbxaddrl[cru->id][slot];
 
 		tmp = phys_addr - tmp;
-		if (((long) tmp) && (tmp <= cru->format.sizeimage)) {
-			write_complete = 1;
+		if (((long) tmp) && (tmp <= rzg2l_cru_get_sizeimage(cru))) {
+			write_complete = true;
 			break;
 		}
 	}
+	prev_slot[cru->id] = slot;
 
 	/* Prepare for capture and update state */
 	if (!write_complete) {
-		cru_err(cru, "Invalid MB address 0x%llx\n", phys_addr);
-		goto done;
+		// use last slot
+		cru_info(cru, "Slot[%d] doesn't have proper output, but continue with it anyway", slot);
 	}
 
 	/*
@@ -1347,6 +1460,9 @@ static irqreturn_t rzv2h_cru_irq(int irq, void *data)
 		cru->queue_buf[slot]->vb2_buf.timestamp = ktime_get_ns();
 		vb2_buffer_done(&cru->queue_buf[slot]->vb2_buf,
 				VB2_BUF_STATE_DONE);
+		/* Call IVC callback if it exists */
+		if (cru->callbacks.frame_end)
+			cru->callbacks.frame_end(cru->ctx_id, cru->queue_buf[slot]->vb2_buf.timestamp, 0);
 		cru->queue_buf[slot] = NULL;
 	} else {
 		/* Scratch buffer was used, dropping frame. */
@@ -1363,7 +1479,80 @@ done:
 
 	return IRQ_RETVAL(handled);
 }
+#else
+static irqreturn_t rzv2h_cru_vsd_addr_wend_irq(int irq, void *data)
+{
+	unsigned int handled = 0;
+	struct rzg2l_cru_dev *cru = data;
+	unsigned long flags;
+	u32 irq_status, i, slot;
 
+	spin_lock_irqsave(&cru->qlock, flags);
+
+	irq_status = rzg2l_cru_read(cru, CRUnINTS2);
+	if (!(irq_status))
+		goto done;
+
+	for (i = 0; i < cru->num_buf; ++i) {
+		if (irq_status & (0x00020000 << i)) {
+			rzg2l_cru_write(cru, CRUnINTS2, (0x00020000 << i));
+			break;
+		}
+	}
+	if (i >= cru->num_buf) {
+		cru_info(cru, "Slot[%d] doesn't have proper output, but continue with it anyway", slot);
+		goto done;
+	}
+	prev_slot[cru->id] = slot;
+	slot = i;
+
+	/*
+	 * To hand buffers back in a known order to userspace start
+	 * to capture first from slot 0.
+	 */
+	if (cru->state == STARTING) {
+		if (cru->is_frame_skip) {
+			if (frame_skip[cru->id] < CRU_FRAME_SKIP) {
+				cru_dbg(cru, "Skipping %d frame\n",
+					frame_skip[cru->id]);
+				frame_skip[cru->id]++;
+				goto done;
+			}
+		}
+
+		cru_dbg(cru, "Capture start synced!\n");
+		cru->state = RUNNING;
+	}
+
+	/* Capture frame */
+	if (cru->queue_buf[slot]) {
+		cru->queue_buf[slot]->field = cru->format.field;
+		cru->queue_buf[slot]->sequence = cru->sequence;
+		cru->queue_buf[slot]->vb2_buf.timestamp = ktime_get_ns();
+		vb2_buffer_done(&cru->queue_buf[slot]->vb2_buf,
+				VB2_BUF_STATE_DONE);
+		/* Call IVC callback if it exists */
+		if (cru->callbacks.frame_end)
+			cru->callbacks.frame_end(cru->ctx_id, cru->queue_buf[slot]->vb2_buf.timestamp, 0);
+		cru->queue_buf[slot] = NULL;
+	} else {
+		/* Scratch buffer was used, dropping frame. */
+		cru_dbg(cru, "Dropping frame %u\n", cru->sequence);
+	}
+
+	cru->sequence++;
+
+	/* Prepare for next frame */
+	rzg2l_cru_fill_hw_slot(cru, slot);
+	handled = 1;
+
+done:
+	spin_unlock_irqrestore(&cru->qlock, flags);
+	return IRQ_RETVAL(handled);
+}
+#endif
+
+#ifdef CONFIG_VIDEO_RZG2L_CRU_IMAGE_PROCESSOR
 static irqreturn_t rzg2l_cru_irq(int irq, void *data)
 {
 	struct rzg2l_cru_dev *cru = data;
@@ -1472,6 +1661,47 @@ done:
 
 	return IRQ_RETVAL(handled);
 }
+#endif
+
+static irqreturn_t rzv2h_cru_err_irq(int irq, void *data)
+{
+	struct rzg2l_cru_dev *cru = data;
+	u32 irq_status;
+	unsigned int handled = 0;
+
+	irq_status = rzg2l_cru_read(cru, CRUnINTS1);
+	if (!(irq_status))
+		goto done;
+
+	handled = 1;
+
+	if (irq_status & (CRUnINTS_FOS | CRUnINTS_SLVES | CRUnINTS_DECES)) {
+		int slot = cru->last_filled_slot;
+
+		cru_err(cru, "axi_mst_err_int: 0x%08x, slot=%d\n", irq_status, slot);
+		if (!auto_recovery) {
+			if (cru->queue_buf[slot]) {
+				cru->queue_buf[slot]->field = cru->format.field;
+				cru->queue_buf[slot]->sequence = cru->sequence;
+				cru->queue_buf[slot]->vb2_buf.timestamp = ktime_get_ns();
+				vb2_buffer_done(&cru->queue_buf[slot]->vb2_buf,
+						VB2_BUF_STATE_DONE);
+				/* Call IVC callback if it exists */
+				if (cru->callbacks.frame_end)
+					cru->callbacks.frame_end(cru->ctx_id, cru->queue_buf[slot]->vb2_buf.timestamp, 1);
+				cru->queue_buf[slot] = NULL;
+				rzg2l_cru_fill_hw_slot(cru, slot);
+			} else {
+				cru_err(cru, "axi_mst_err_int: no queue buf\n");
+			}
+		}
+	}
+
+	rzg2l_cru_write(cru, CRUnINTS1, irq_status);
+
+done:
+	return IRQ_RETVAL(handled);
+}
 
 void rzg2l_cru_dma_unregister(struct rzg2l_cru_dev *cru)
 {
@@ -1480,7 +1710,7 @@ void rzg2l_cru_dma_unregister(struct rzg2l_cru_dev *cru)
 	v4l2_device_unregister(&cru->v4l2_dev);
 }
 
-int rzg2l_cru_dma_register(struct rzg2l_cru_dev *cru, int irq)
+int rzg2l_cru_dma_register(struct rzg2l_cru_dev *cru, const int *irqs)
 {
 	struct vb2_queue *q = &cru->queue;
 	int i, ret;
@@ -1521,11 +1751,27 @@ int rzg2l_cru_dma_register(struct rzg2l_cru_dev *cru, int irq)
 	}
 
 	/* IRQ */
-	ret = devm_request_irq(cru->dev, irq, (cru->info->type == RZ_CRU_G2L) ?
+#ifdef CONFIG_VIDEO_RZG2L_CRU_IMAGE_PROCESSOR
+	ret = devm_request_irq(cru->dev, irqs[CRU_IRQ_IMAGE_CONV_INT], (cru->info->type == RZ_CRU_G2L) ?
 			       rzg2l_cru_irq : rzv2h_cru_irq,
-			       IRQF_SHARED, KBUILD_MODNAME, cru);
+			       IRQF_SHARED, dev_name(cru->dev), cru);
 	if (ret) {
-		cru_err(cru, "failed to request irq\n");
+		cru_err(cru, "failed to request image conv_int irq\n");
+		goto error;
+	}
+#else
+	ret = devm_request_irq(cru->dev, irqs[CRU_IRQ_CRU_VSD_ADDR_WEND], rzv2h_cru_vsd_addr_wend_irq,
+			       IRQF_SHARED, dev_name(cru->dev), cru);
+	if (ret) {
+		cru_err(cru, "failed to request cru_vd_addr_wend irq\n");
+		goto error;
+	}
+#endif
+
+	ret = devm_request_irq(cru->dev, irqs[CRU_IRQ_AXI_MST_ERR_INT], rzv2h_cru_err_irq,
+			       IRQF_SHARED, dev_name(cru->dev), cru);
+	if (ret) {
+		cru_err(cru, "failed to request axi_mst_err_int irq\n");
 		goto error;
 	}
 

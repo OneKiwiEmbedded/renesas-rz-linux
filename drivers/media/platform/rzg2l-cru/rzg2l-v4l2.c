@@ -15,8 +15,9 @@
 #include <media/v4l2-rect.h>
 
 #include "rzg2l-cru.h"
+#include <media/rzg2l-sensor-settings.h>
 
-#define RZG2L_CRU_DEFAULT_FORMAT	V4L2_PIX_FMT_YUYV
+#define RZG2L_CRU_DEFAULT_FORMAT	V4L2_PIX_FMT_SBGGR12
 #define RZG2L_CRU_DEFAULT_WIDTH		800
 #define RZG2L_CRU_DEFAULT_HEIGHT	600
 #define RZG2L_CRU_DEFAULT_FIELD		V4L2_FIELD_NONE
@@ -30,114 +31,166 @@ static const struct rzg2l_cru_video_format rzg2l_cru_formats[] = {
 	{
 		.fourcc			= V4L2_PIX_FMT_NV16,
 		.bpp			= 1,
+		.dtype		= 0,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_GREY,
 		.bpp			= 1,
+		.dtype		= 0,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_YUYV,
 		.bpp			= 2,
+		.dtype		= 0,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_UYVY,
 		.bpp			= 2,
+		.dtype		= 0,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_BGR24,
 		.bpp			= 3,
+		.dtype		= 0,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_XBGR32,
 		.bpp			= 4,
+		.dtype		= 0,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_ABGR32,
 		.bpp			= 4,
+		.dtype		= 0,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_ARGB32,
 		.bpp			= 4,
+		.dtype		= 0,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SRGGB8,
 		.bpp			= 1,
+		.dtype		= 0x2a,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SBGGR8,
 		.bpp			= 1,
+		.dtype		= 0x2a,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SGRBG8,
 		.bpp			= 1,
+		.dtype		= 0x2a,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SGBRG8,
 		.bpp			= 1,
+		.dtype		= 0x2a,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SRGGB10,
 		.bpp			= 2,
+		.dtype		= 0x2b,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SBGGR10,
 		.bpp			= 2,
+		.dtype		= 0x2b,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SGRBG10,
 		.bpp			= 2,
+		.dtype		= 0x2b,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SGBRG10,
 		.bpp			= 2,
+		.dtype		= 0x2b,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SRGGB12,
-		.bpp			= 2,
+#ifdef CONFIG_VIDEO_RZG2L_CRU_IMAGE_PROCESSOR
+		.bpp			= 8,
+		.bpp_denominator_minus1 = 4,
+#else
+		.bpp			= 12,
+		.bpp_denominator_minus1 = 7,
+#endif
+		.dtype		= 0x2c,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SBGGR12,
-		.bpp			= 2,
+#ifdef CONFIG_VIDEO_RZG2L_CRU_IMAGE_PROCESSOR
+		.bpp			= 8,
+		.bpp_denominator_minus1 = 4,
+#else
+		.bpp			= 12,
+		.bpp_denominator_minus1 = 7,
+#endif
+		.dtype		= 0x2c,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SGRBG12,
-		.bpp			= 2,
+#ifdef CONFIG_VIDEO_RZG2L_CRU_IMAGE_PROCESSOR
+		.bpp			= 8,
+		.bpp_denominator_minus1 = 4,
+#else
+		.bpp			= 12,
+		.bpp_denominator_minus1 = 7,
+#endif
+		.dtype		= 0x2c,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SGBRG12,
-		.bpp			= 2,
+#ifdef CONFIG_VIDEO_RZG2L_CRU_IMAGE_PROCESSOR
+		.bpp			= 8,
+		.bpp_denominator_minus1 = 4,
+#else
+		.bpp			= 12,
+		.bpp_denominator_minus1 = 7,
+#endif
+		.dtype		= 0x2c,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SRGGB14P,
 		.bpp			= 2,
+		.dtype		= 0x2d,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SBGGR14P,
 		.bpp			= 2,
+		.dtype		= 0x2d,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SGRBG14P,
 		.bpp			= 2,
+		.dtype		= 0x2d,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SGBRG14P,
 		.bpp			= 2,
+		.dtype		= 0x2d,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SRGGB16,
 		.bpp			= 2,
+		.dtype		= 0x2e,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SBGGR16,
 		.bpp			= 2,
+		.dtype		= 0x2e,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SGRBG16,
 		.bpp			= 2,
+		.dtype		= 0x2e,
 	},
 	{
 		.fourcc			= V4L2_PIX_FMT_SGBRG16,
 		.bpp			= 2,
+		.dtype		= 0x2e,
 	},
 };
 
@@ -152,25 +205,48 @@ const struct rzg2l_cru_video_format
 
 	return NULL;
 }
+EXPORT_SYMBOL_GPL(rzg2l_cru_format_from_pixel);
 
-static u32 rzg2l_cru_format_bytesperline(struct v4l2_pix_format *pix)
+static u32 rzg2l_cru_format_bytesperline(struct v4l2_pix_format *pix, struct rzg2l_cru_dev *cru)
 {
 	const struct rzg2l_cru_video_format *fmt;
+	uint width;
 
 	fmt = rzg2l_cru_format_from_pixel(pix->pixelformat);
 
 	if (WARN_ON(!fmt))
 		return -EINVAL;
-
-	return pix->width * fmt->bpp;
+#define IMAGE_STRIDE_UNIT 0x80
+#ifdef CONFIG_VIDEO_RZG2L_CRU_IMAGE_PROCESSOR
+	width = pix->width;
+#else
+	if (cru->sensor_settings.pixel_area.horizontal.recording_pixel_area == 0)
+		width = pix->width;
+	else
+		width = cru->sensor_settings.pixel_area.horizontal.recording_pixel_area;
+#endif
+	return (width * fmt->bpp / (fmt->bpp_denominator_minus1 + 1) + IMAGE_STRIDE_UNIT - 1) / IMAGE_STRIDE_UNIT * IMAGE_STRIDE_UNIT;
 }
 
-static u32 rzg2l_cru_format_sizeimage(struct v4l2_pix_format *pix)
+static u32 rzg2l_cru_format_sizeimage(struct v4l2_pix_format *pix, struct rzg2l_cru_dev *cru)
 {
-	if (pix->pixelformat == V4L2_PIX_FMT_NV16)
-		return pix->bytesperline * pix->height * 2;
+	uint height;
+	uint sizeimage;
 
-	return pix->bytesperline * pix->height;
+#ifdef CONFIG_VIDEO_RZG2L_CRU_IMAGE_PROCESSOR
+	height = pix->height;
+#else
+	if (cru->sensor_settings.pixel_area.vertical.recording_pixel_area == 0)
+		height = pix->height;
+	else
+		height = cru->sensor_settings.pixel_area.vertical.recording_pixel_area + cru->sensor_settings.pixel_area.vertical.dummy_0 + cru->sensor_settings.pixel_area.vertical.ignored_area_of_effective_pixel_0 + cru->sensor_settings.pixel_area.vertical.effective_margin_for_color_processing_0;
+#endif
+	sizeimage = (pix->bytesperline * height + 512 - 1) / 512 * 512;
+
+	if (pix->pixelformat == V4L2_PIX_FMT_NV16)
+		return sizeimage * 2;
+
+	return sizeimage;
 }
 
 static void rzg2l_cru_format_align(struct rzg2l_cru_dev *cru,
@@ -205,8 +281,8 @@ static void rzg2l_cru_format_align(struct rzg2l_cru_dev *cru,
 	v4l_bound_align_image(&pix->width, 320, cru->info->max_width, 1,
 			      &pix->height, 240, cru->info->max_height, 2, 0);
 
-	pix->bytesperline = rzg2l_cru_format_bytesperline(pix);
-	pix->sizeimage = rzg2l_cru_format_sizeimage(pix);
+	pix->bytesperline = rzg2l_cru_format_bytesperline(pix, cru);
+	pix->sizeimage = rzg2l_cru_format_sizeimage(pix, cru);
 
 	cru_dbg(cru, "Format %ux%u bpl: %u size: %u\n",
 		pix->width, pix->height, pix->bytesperline, pix->sizeimage);
@@ -262,7 +338,9 @@ static int rzg2l_cru_get_sd_format(struct rzg2l_cru_dev *cru,
 		cru->format.field = fmt.format.field;
 
 	cru->format.bytesperline =
-				rzg2l_cru_format_bytesperline(&cru->format);
+				rzg2l_cru_format_bytesperline(&cru->format, cru);
+	cru->format.sizeimage =
+				rzg2l_cru_format_sizeimage(&cru->format, cru);
 
 	return 0;
 }
@@ -293,9 +371,6 @@ static int rzg2l_cru_mc_s_fmt_vid_cap(struct file *file, void *priv,
 				 struct v4l2_format *f)
 {
 	struct rzg2l_cru_dev *cru = video_drvdata(file);
-
-	if (vb2_is_busy(&cru->queue))
-		return -EBUSY;
 
 	rzg2l_cru_mc_try_format(cru, &f->fmt.pix);
 
@@ -423,7 +498,7 @@ static int rzg2l_cru_s_selection(struct file *file, void *fh,
 			r.top--;
 
 		fmt = rzg2l_cru_format_from_pixel(cru->format.pixelformat);
-		while ((r.left * fmt->bpp) & HW_BUFFER_MASK)
+		while ((r.left * fmt->bpp / (fmt->bpp_denominator_minus1 + 1)) & HW_BUFFER_MASK)
 			r.left--;
 
 		cru->compose = s->r = r;
@@ -519,6 +594,7 @@ static int rzg2l_cru_mc_open(struct file *file)
 	ret = pm_runtime_get_sync(cru->dev);
 	if (ret < 0)
 		goto err_unlock;
+	cru->pm_got = true;
 
 	rzg2l_cru_get_sd_format(cru, &cru->format);
 
@@ -539,6 +615,7 @@ err_v4l2pm:
 	v4l2_pipeline_pm_put(&cru->vdev.entity);
 err_pm:
 	pm_runtime_put(cru->dev);
+	cru->pm_got = false;
 err_unlock:
 	mutex_unlock(&cru->lock);
 
@@ -557,6 +634,7 @@ static int rzg2l_cru_mc_release(struct file *file)
 
 	v4l2_pipeline_pm_put(&cru->vdev.entity);
 	pm_runtime_put(cru->dev);
+	cru->pm_got = false;
 
 	mutex_unlock(&cru->lock);
 

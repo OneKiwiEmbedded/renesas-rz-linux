@@ -33,6 +33,8 @@
 /* Module Control Register 0 */
 #define CSI2nMCT0			0x10
 #define CSI2nMCT0_VDLN(x)		((x) << 0)
+#define CSI2nMCT0_EDMD			BIT(17)
+#define CSI2nMCT0_ZLMD			BIT(16)
 
 /* Module Control Register 2 */
 #define CSI2nMCT2			0x18
@@ -56,6 +58,9 @@
 
 /* Receive Data Type Enable High Register */
 #define CSI2nDTEH			0x64
+
+/* Generic Short Packet Control Register */
+#define CSI2nGSCT			0x280
 
 /* DPHY registers */
 /* D-PHY Control Register 0 */
@@ -89,6 +94,10 @@
 /* DPHY Slave Timing Control Register */
 #define S_TIMCTL			0x41C
 #define S_TIMCTL_S_HSSETTLECTL(x)	((x) << 8)
+
+/* Master and Slave D-PHY Control Register */
+#define DPHY_B_DPHYCTL_MSB		0x424
+#define DPHY_B_DPHYCTL_MSB_DPHY_DC_CONTROL	BIT(8)
 
 /* Slave D-PHY Control Register */
 #define DPHY_S_DPHYCTL_MSB		0x434
@@ -362,12 +371,11 @@ static int rzg2l_csi2_dphy_setting(struct rzg2l_csi2 *priv, bool on)
 			rzg2l_csi2_write(priv, S_TIMCTL,
 					 S_TIMCTL_S_HSSETTLECTL(hssettle));
 
+			rzg2l_csi2_set(priv, DPHY_S_DPHYCTL_MSB,
+				       DPHY_S_DPHYCTL_MSB_DESKEW);
 			if (priv->hsfreq > 1500)
-				rzg2l_csi2_set(priv, DPHY_S_DPHYCTL_MSB,
-					       DPHY_S_DPHYCTL_MSB_DESKEW);
-			else
-				rzg2l_csi2_clr(priv, DPHY_S_DPHYCTL_MSB,
-					       DPHY_S_DPHYCTL_MSB_DESKEW);
+				rzg2l_csi2_set(priv, DPHY_B_DPHYCTL_MSB,
+					       DPHY_B_DPHYCTL_MSB_DPHY_DC_CONTROL);
 		}
 
 		/* Turn on the DPHY Clock */
@@ -389,7 +397,7 @@ static int rzg2l_csi2_dphy_setting(struct rzg2l_csi2 *priv, bool on)
 			/* Cancel the EN_BGR register setting */
 			rzg2l_csi2_clr(priv, CSIDPHYCTRL0, CSIDPHYCTRL0_EN_BGR);
 		} else {
-			rzg2l_csi2_write(priv, CSI2nMCT0, CSI2nMCT0_VDLN(0));
+			rzg2l_csi2_write(priv, CSI2nMCT0, CSI2nMCT0_EDMD | CSI2nMCT0_ZLMD | CSI2nMCT0_VDLN(0));
 		}
 	}
 
@@ -425,20 +433,23 @@ static int rzg2l_csi2_calc_mbps(struct rzg2l_csi2 *priv, unsigned int bpp)
 	return mbps;
 }
 
-int rzg2l_cru_init_csi_dphy(struct v4l2_subdev *sd)
+int rzg2l_cru_init_csi_dphy(struct v4l2_subdev *sd, uint force_mbps)
 {
 	struct rzg2l_csi2 *priv = sd_to_csi2(sd);
 	const struct rzg2l_csi2_format *format;
 	int ret, mbps;
 
 	/* Code is validated in set_fmt. */
-	format = rzg2l_csi2_code_to_fmt(priv->mf.code);
+	if (force_mbps)
+		priv->hsfreq = force_mbps;
+	else {
+		format = rzg2l_csi2_code_to_fmt(priv->mf.code);
+		mbps = rzg2l_csi2_calc_mbps(priv, format->bpp);
+		if (mbps < 0)
+			return mbps;
 
-	mbps = rzg2l_csi2_calc_mbps(priv, format->bpp);
-	if (mbps < 0)
-		return mbps;
-
-        priv->hsfreq = mbps;
+	    priv->hsfreq = mbps;
+	}
 
 	mutex_lock(&priv->lock);
 
@@ -467,7 +478,7 @@ static int rzg2l_csi2_start(struct rzg2l_csi2 *priv)
 			"Failed to support %d data lanes\n", priv->lanes);
 		return -EINVAL;
 	}
-	rzg2l_csi2_write(priv, CSI2nMCT0, CSI2nMCT0_VDLN(priv->lanes));
+	rzg2l_csi2_write(priv, CSI2nMCT0, CSI2nMCT0_EDMD | CSI2nMCT0_ZLMD | CSI2nMCT0_VDLN(priv->lanes));
 
 	/* Set some parameters in accordance with the sensor transfer rate */
 	vclk_rate = DIV_ROUND_UP(clk_get_rate(priv->vclk), 1000000) - 1;
@@ -483,8 +494,14 @@ static int rzg2l_csi2_start(struct rzg2l_csi2 *priv)
 	 * YUV422 8-bit,RGB565, RGB888, RAW8 to RAW20,
 	 * User-defined 8-bit data types 1 to 8
 	 */
-	rzg2l_csi2_write(priv, CSI2nDTEL, 0xf77cff0f);
+#ifdef CONFIG_VIDEO_RZG2L_CRU_EMBEDDED_DATA
+	rzg2l_csi2_write(priv, CSI2nDTEL, 0xf77fff0f);
+#else
+	rzg2l_csi2_write(priv, CSI2nDTEL, 0xf778ff0f);
+#endif
 	rzg2l_csi2_write(priv, CSI2nDTEH, 0x00ffff1f);
+
+	rzg2l_csi2_write(priv, CSI2nGSCT, 0x00010008);
 
 	clk_disable_unprepare(priv->vclk);
 	for (count = 0; count < 5; count++) {
@@ -636,6 +653,7 @@ static int rzg2l_csi2_notify_bound(struct v4l2_async_notifier *notifier,
 {
 	struct rzg2l_csi2 *priv = notifier_to_csi2(notifier);
 	int pad;
+	u32 flags;
 
 	pad = media_entity_get_fwnode_pad(&subdev->entity, asd->match.fwnode,
 					  MEDIA_PAD_FL_SOURCE);
@@ -648,10 +666,15 @@ static int rzg2l_csi2_notify_bound(struct v4l2_async_notifier *notifier,
 
 	dev_dbg(priv->dev, "Bound %s pad: %d\n", subdev->name, pad);
 
+	flags = MEDIA_LNK_FL_ENABLED;
+	/* RZ/V2H doesn't have IMMUTABLE. You may want to remove the link
+	 * to use the CRU test pattern feature when a sensor doesn't support YUV422
+	 */
+	if (priv->type == MIPI_CSI2_DPHY_RZ_G2L)
+		flags |= MEDIA_LNK_FL_IMMUTABLE;
+
 	return media_create_pad_link(&subdev->entity, pad,
-				     &priv->subdev.entity, 0,
-				     MEDIA_LNK_FL_ENABLED |
-				     MEDIA_LNK_FL_IMMUTABLE);
+				     &priv->subdev.entity, 0, flags);
 }
 
 static void rzg2l_csi2_notify_unbind(struct v4l2_async_notifier *notifier,

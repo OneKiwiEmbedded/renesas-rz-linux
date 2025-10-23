@@ -18,6 +18,8 @@
 #include <linux/reset.h>
 #include <linux/clk.h>
 
+#include <media/rzg2l-sensor-settings.h>
+
 /*
  * CRU Image Processing register subset common for all platforms.
  * Not all registers will exist on all platforms.
@@ -53,10 +55,35 @@ enum {
 	AMnAXISTPACK,	/* AXI-VD Bus Master Transfer Stop Status Register */
 	AMnIS,		/* Image Stride Setting Register */
 	ICnEN,		/* CRU Image Converter Enable Register */
+	ICnDTVP,    /* CRU Data Value Processing */
 	ICnSVCNUM,	/* CRU SVC Number Register */
 	ICnSVC,		/* CRU VC Select Register */
 	ICnMC,		/* CRU Image Converter Main Control Register */
 	ICnIPMC_C0,	/* CRU Image Converter Main Control 0 Register */
+	ICnNIPDT_C0L, /* CRU Non Image Process Data Type Code Select Lower Register (SVC0) */
+	ICnNIPDT_C0H, /* CRU Non Image Process Data Type Code Select Higher Register (SVC0) */
+	ICnNIPDT_C1L, /* CRU Non Image Process Data Type Code Select Lower Register (SVC1) */
+	ICnNIPDT_C1H, /* CRU Non Image Process Data Type Code Select Higher Register (SVC1) */
+	ICnNIPDT_C2L, /* CRU Non Image Process Data Type Code Select Lower Register (SVC2) */
+	ICnNIPDT_C2H, /* CRU Non Image Process Data Type Code Select Higher Register (SVC2) */
+	ICnNIPDT_C3L, /* CRU Non Image Process Data Type Code Select Lower Register (SVC3) */
+	ICnNIPDT_C3H, /* CRU Non Image Process Data Type Code Select Higher Register (SVC3) */
+	ICnSLPrC_C0, /* CRU Image Clipping Start Line Register (SVC0) */
+	ICnELPrC_C0, /* CRU Image Clipping End Line Register (SVC0) */
+	ICnSPPrC_C0, /* CRU Image Clipping Start Pixel Register (SVC0) */
+	ICnEPPrC_C0, /* CRU Image Clipping End Pixel Register (SVC0) */
+	ICnSLPrC_C1, /* CRU Image Clipping Start Line Register (SVC0) */
+	ICnELPrC_C1, /* CRU Image Clipping End Line Register (SVC1) */
+	ICnSPPrC_C1, /* CRU Image Clipping Start Pixel Register (SVC1) */
+	ICnEPPrC_C1, /* CRU Image Clipping End Pixel Register (SVC1) */
+	ICnSLPrC_C2, /* CRU Image Clipping Start Line Register (SVC2) */
+	ICnELPrC_C2, /* CRU Image Clipping End Line Register (SVC2) */
+	ICnSPPrC_C2, /* CRU Image Clipping Start Pixel Register (SVC2) */
+	ICnEPPrC_C2, /* CRU Image Clipping End Pixel Register (SVC2) */
+	ICnSLPrC_C3, /* CRU Image Clipping Start Line Register (SVC3) */
+	ICnELPrC_C3, /* CRU Image Clipping End Line Register (SVC3) */
+	ICnSPPrC_C3, /* CRU Image Clipping Start Pixel Register (SVC3) */
+	ICnEPPrC_C3, /* CRU Image Clipping End Pixel Register (SVC0) */
 	ICnIPMC_C1,	/* CRU Image Converter Main Control 1 Register */
 	ICnIPMC_C2,	/* CRU Image Converter Main Control 2 Register */
 	ICnIPMC_C3,	/* CRU Image Converter Main Control 3 Register */
@@ -131,9 +158,34 @@ static const struct regs_offset rzv2h_cru_regs_offset[] = {
 	[AMnAXISTPACK]	=	{ .offset = 0x114, },
 	[AMnIS]		=	{ .offset = 0x128, },
 	[ICnEN]		=	{ .offset = 0x1F0, },
+	[ICnDTVP]       =   { .offset = 0x1F4, },
 	[ICnSVCNUM]	=	{ .offset = 0x1F8, },
 	[ICnSVC]	=	{ .offset = 0x1FC, },
 	[ICnIPMC_C0]	=	{ .offset = 0x200, },
+	[ICnNIPDT_C0L]  =   { .offset = 0x204, },
+	[ICnNIPDT_C0H]  =   { .offset = 0x208, },
+	[ICnNIPDT_C1L]  =   { .offset = 0x264, },
+	[ICnNIPDT_C1H]  =   { .offset = 0x268, },
+	[ICnNIPDT_C2L]  =   { .offset = 0x26C, },
+	[ICnNIPDT_C2H]  =   { .offset = 0x270, },
+	[ICnNIPDT_C3L]  =   { .offset = 0x274, },
+	[ICnNIPDT_C3H]  =   { .offset = 0x278, },
+	[ICnSLPrC_C0]   =   { .offset = 0x20C, },
+	[ICnSLPrC_C1]   =   { .offset = 0x28C, },
+	[ICnSLPrC_C2]   =   { .offset = 0x2A0, },
+	[ICnSLPrC_C3]   =   { .offset = 0x2B4, },
+	[ICnELPrC_C0]   =   { .offset = 0x210, },
+	[ICnELPrC_C1]   =   { .offset = 0x290, },
+	[ICnELPrC_C2]   =   { .offset = 0x2A4, },
+	[ICnELPrC_C3]   =   { .offset = 0x2B8, },
+	[ICnSPPrC_C0]   =   { .offset = 0x214, },
+	[ICnSPPrC_C1]   =   { .offset = 0x294, },
+	[ICnSPPrC_C2]   =   { .offset = 0x2A8, },
+	[ICnSPPrC_C3]   =   { .offset = 0x2BC, },
+	[ICnEPPrC_C0]   =   { .offset = 0x218, },
+	[ICnEPPrC_C1]   =   { .offset = 0x298, },
+	[ICnEPPrC_C2]   =   { .offset = 0x2AC, },
+	[ICnEPPrC_C3]   =   { .offset = 0x2C0, },
 	[ICnIPMC_C1]	=	{ .offset = 0x258, },
 	[ICnIPMC_C2]	=	{ .offset = 0x25C, },
 	[ICnIPMC_C3]	=	{ .offset = 0x260, },
@@ -221,10 +273,14 @@ enum rzg2l_cru_fmt_types {
  * struct rzg2l_cru_video_format - Data format stored in memory
  * @fourcc:	Pixelformat
  * @bpp:	Bytes per pixel
+ * @dtype:	RAW bit depth value for Input Video Control register
+ * @bpp_denominator_minus1: subtracting one from the denominator of bpp
  */
 struct rzg2l_cru_video_format {
 	u32 fourcc;
 	u8 bpp;
+	u8 dtype;
+	u8 bpp_denominator_minus1;
 };
 
 /**
@@ -265,6 +321,15 @@ struct rzg2l_cru_info {
 
 	const struct regs_offset *regs;
 	enum rz_cru_type type;
+};
+
+/**
+ * struct rzg2l_cru_callbacks - Callback functions which trigger during CRU operations
+ * (So far only IVC in RZ/V2H requires this)
+ * @frame_end: called when CRU reached the end of a frame
+ */
+struct rzg2l_cru_callbacks {
+	int (*frame_end)(u32 ctx_id, u64 timestamp, int error);
 };
 
 /**
@@ -311,6 +376,7 @@ struct rzg2l_cru_info {
  * @rzg2l_cru_resume:	delayed work at resuming
  * @setup_wait:		wait queue used to setup VIN
  * @suspend:		suspend flag
+ * @ctx_id:		Context ID of RZ/V2H ISP
  */
 struct rzg2l_cru_dev {
 	struct device *dev;
@@ -356,6 +422,7 @@ struct rzg2l_cru_dev {
 		struct reset_control *presetn;
 		struct reset_control *aresetn;
 	} rstc;
+	bool pm_got;
 
 	struct workqueue_struct *work_queue;
 	struct delayed_work rzg2l_cru_resume;
@@ -364,8 +431,13 @@ struct rzg2l_cru_dev {
 	bool is_frame_skip;
 
 	struct task_struct *retry_thread;
+	struct rzg2l_cru_callbacks callbacks;
 
 	u32 id;
+	u32 ctx_id;
+	uint exposure;
+	struct rzg2l_sensor_settings sensor_settings;
+	int last_filled_slot;
 };
 
 #define cru_to_source(cru)		((cru)->parallel->subdev)
@@ -399,7 +471,14 @@ struct rzg2l_cru_group {
 	} csi;
 };
 
-int rzg2l_cru_dma_register(struct rzg2l_cru_dev *cru, int irq);
+enum cru_irq_type {
+	CRU_IRQ_IMAGE_CONV_INT,
+	CRU_IRQ_CRU_VSD_ADDR_WEND,
+	CRU_IRQ_AXI_MST_ERR_INT,
+	CRU_IRQ_MAX
+};
+
+int rzg2l_cru_dma_register(struct rzg2l_cru_dev *cru, const int *irqs);
 void rzg2l_cru_dma_unregister(struct rzg2l_cru_dev *cru);
 
 int rzg2l_cru_v4l2_register(struct rzg2l_cru_dev *cru);
@@ -411,5 +490,10 @@ const struct rzg2l_cru_video_format
 void rzg2l_cru_resume_start_streaming(struct work_struct *work);
 void rzg2l_cru_suspend_stop_streaming(struct rzg2l_cru_dev *cru);
 
-int rzg2l_cru_init_csi_dphy(struct v4l2_subdev *sd);
+int rzg2l_cru_init_csi_dphy(struct v4l2_subdev *sd, uint force_mbps);
+
+int rzg2l_cru_set_callbacks(struct rzg2l_cru_dev *cru, const struct rzg2l_cru_callbacks *ops);
+int rzv2h_cru_pm_get(struct rzg2l_cru_dev *cru);
+void rzv2h_cru_pm_put(struct rzg2l_cru_dev *cru);
+
 #endif

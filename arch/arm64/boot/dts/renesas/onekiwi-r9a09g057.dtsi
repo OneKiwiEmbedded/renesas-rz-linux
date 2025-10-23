@@ -1231,7 +1231,9 @@
 				 <&cpg CPG_MOD R9A09G057_CRU0_PCLK>,
 				 <&cpg CPG_MOD R9A09G057_CRU0_ACLK>;
 			clock-names = "vclk", "pclk", "aclk";
-			interrupts = <GIC_SPI 838 IRQ_TYPE_LEVEL_HIGH>;
+			//interrupts = <GIC_SPI 838 IRQ_TYPE_LEVEL_HIGH>;
+			interrupts = <GIC_SPI 842 IRQ_TYPE_LEVEL_HIGH>, <GIC_SPI 839 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "cru_vsd_addr_wend", "axi_mst_err_int";
 			resets = <&cpg R9A09G057_CRU0_PRESETN>,
 				 <&cpg R9A09G057_CRU0_ARESETN>;
 			reset-names = "presetn", "aresetn";
@@ -1261,7 +1263,9 @@
 				 <&cpg CPG_MOD R9A09G057_CRU1_PCLK>,
 				 <&cpg CPG_MOD R9A09G057_CRU1_ACLK>;
 			clock-names = "vclk", "pclk", "aclk";
-			interrupts = <GIC_SPI 844 IRQ_TYPE_LEVEL_HIGH>;
+			//interrupts = <GIC_SPI 844 IRQ_TYPE_LEVEL_HIGH>;
+			interrupts = <GIC_SPI 848 IRQ_TYPE_LEVEL_HIGH>, <GIC_SPI 845 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "cru_vsd_addr_wend", "axi_mst_err_int";
 			resets = <&cpg R9A09G057_CRU1_PRESETN>,
 				 <&cpg R9A09G057_CRU1_ARESETN>;
 			reset-names = "presetn", "aresetn";
@@ -1291,7 +1295,9 @@
 				 <&cpg CPG_MOD R9A09G057_CRU2_PCLK>,
 				 <&cpg CPG_MOD R9A09G057_CRU2_ACLK>;
 			clock-names = "vclk", "pclk", "aclk";
-			interrupts = <GIC_SPI 850 IRQ_TYPE_LEVEL_HIGH>;
+			//interrupts = <GIC_SPI 850 IRQ_TYPE_LEVEL_HIGH>;
+			interrupts = <GIC_SPI 853 IRQ_TYPE_LEVEL_HIGH>, <GIC_SPI 851 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "cru_vsd_addr_wend", "axi_mst_err_int";
 			resets = <&cpg R9A09G057_CRU2_PRESETN>,
 				 <&cpg R9A09G057_CRU2_ARESETN>;
 			reset-names = "presetn", "aresetn";
@@ -1321,7 +1327,9 @@
 				 <&cpg CPG_MOD R9A09G057_CRU3_PCLK>,
 				 <&cpg CPG_MOD R9A09G057_CRU3_ACLK>;
 			clock-names = "vclk", "pclk", "aclk";
-			interrupts = <GIC_SPI 855 IRQ_TYPE_LEVEL_HIGH>;
+			//interrupts = <GIC_SPI 855 IRQ_TYPE_LEVEL_HIGH>;
+			interrupts = <GIC_SPI 858 IRQ_TYPE_LEVEL_HIGH>, <GIC_SPI 856 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "cru_vsd_addr_wend", "axi_mst_err_int";
 			resets = <&cpg R9A09G057_CRU3_PRESETN>,
 				 <&cpg R9A09G057_CRU3_ARESETN>;
 			reset-names = "presetn", "aresetn";
@@ -1656,6 +1664,53 @@
 			resets = <&cpg R9A09G057_RCPU_DMAC_1_ARESETN>;
 			#dma-cells = <1>;
 			dma-channels = <16>;
+			status = "disabled";
+		};
+
+		input_video_control: input_video_control@16040000 {
+			compatible = "renesas,rzv2h-ivc";
+			reg = <0x0 0x16040000 0x0 0x00010000>;
+			clocks = <&cpg CPG_MOD R9A09G057_ISP_PCLK>;
+			clock-names = "pclk";
+			resets = <&cpg R9A09G057_ISP_PRESETN>;
+			reset-names = "presetn";
+			interrupts = <GIC_SPI 860 IRQ_TYPE_EDGE_RISING>;
+			interrupt-names = "IVC";
+			status = "disabled";
+		};
+
+		isp: isp@16080000 {
+			compatible = "arm,isp";
+			reg = <0x0 0x16080000 0x0 0x00400000>;
+			clocks = <&cpg CPG_MOD R9A09G057_ISP_REG_ACLK>,
+					<&cpg CPG_MOD R9A09G057_ISP_VIN_ACLK>,
+					<&cpg CPG_MOD R9A09G057_ISP_ISP_SCLK>;
+			clock-names = "reg_aclk", "vin_aclk", "isp_sclk";
+			resets = <&cpg R9A09G057_ISP_REG_ARESETN>,
+					<&cpg R9A09G057_ISP_VIN_ARESETN>,
+					<&cpg R9A09G057_ISP_ISP_SRESETN>;
+			reset-names = "reg_aresetn", "vin_aresetn", "isp_sresetn";
+			interrupts = <GIC_SPI 859 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "ISP";
+			memory-region = <&isp_reserved>;
+			status = "disabled";
+		};
+
+		sensor: soc_sensor@16284000 {
+			compatible = "soc,sensor";
+			reg = <0x0 0x16284000 0x0 0x001000>;
+			status = "disabled";
+		};
+
+		lens: soc_lens@16280000 {
+			compatible = "soc,lens";
+			reg = <0x0 0x16280000 0x0 0x001000>;
+			status = "disabled";
+		};
+
+		iq: soc_iq@16286000 {
+			compatible = "soc,iq";
+			reg = <0x0 0x16286000 0x0 0x001000>;
 			status = "disabled";
 		};
 

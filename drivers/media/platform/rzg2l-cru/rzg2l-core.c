@@ -11,6 +11,7 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/of_graph.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
@@ -21,6 +22,21 @@
 #include <media/v4l2-mc.h>
 
 #include "rzg2l-cru.h"
+
+static const char * const cru_irq_name[] = {
+#ifdef CONFIG_VIDEO_RZG2L_CRU_IMAGE_PROCESSOR
+	[CRU_IRQ_IMAGE_CONV_INT] = "image_conv_int",
+#else
+	[CRU_IRQ_CRU_VSD_ADDR_WEND] = "cru_vsd_addr_wend",
+#endif
+	[CRU_IRQ_AXI_MST_ERR_INT] = "axi_mst_err_int",
+	[CRU_IRQ_MAX] = NULL,
+};
+
+static const char *rzg2l_cru_get_irq_name(enum cru_irq_type i)
+{
+	return cru_irq_name[i];
+}
 
 #define v4l2_dev_to_cru(d)	container_of(d, struct rzg2l_cru_dev, v4l2_dev)
 
@@ -512,7 +528,7 @@ static int rzg2l_cru_probe(struct platform_device *pdev)
 {
 	struct rzg2l_cru_dev *cru;
 	struct resource *mem;
-	int irq, ret, i;
+	int irqs[CRU_IRQ_MAX], ret, i;
 	struct v4l2_ctrl *ctrl;
 
 	cru = devm_kzalloc(&pdev->dev, sizeof(*cru), GFP_KERNEL);
@@ -521,6 +537,7 @@ static int rzg2l_cru_probe(struct platform_device *pdev)
 
 	cru->dev = &pdev->dev;
 	cru->info = of_device_get_match_data(&pdev->dev);
+	cru->exposure = 1;
 
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (mem == NULL)
@@ -530,9 +547,24 @@ static int rzg2l_cru_probe(struct platform_device *pdev)
 	if (IS_ERR(cru->base))
 		return PTR_ERR(cru->base);
 
-	irq = platform_get_irq(pdev, 0);
-	if (irq < 0)
-		return irq;
+	if (of_reserved_mem_device_init(&pdev->dev))
+		dev_err(&pdev->dev, "failed to get reserved memory\n");
+	if (dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64)))
+		dev_err(&pdev->dev, "failed to set 64-bit DMA mask\n");
+
+#ifdef CONFIG_VIDEO_RZG2L_CRU_IMAGE_PROCESSOR
+	irqs[CRU_IRQ_IMAGE_CONV_INT] = platform_get_irq_byname(pdev, rzg2l_cru_get_irq_name(CRU_IRQ_IMAGE_CONV_INT));
+	if (irqs[CRU_IRQ_IMAGE_CONV_INT] < 0)
+		return irqs[CRU_IRQ_IMAGE_CONV_INT];
+#else
+	irqs[CRU_IRQ_CRU_VSD_ADDR_WEND] = platform_get_irq_byname(pdev, rzg2l_cru_get_irq_name(CRU_IRQ_CRU_VSD_ADDR_WEND));
+	if (irqs[CRU_IRQ_CRU_VSD_ADDR_WEND] < 0)
+		return irqs[CRU_IRQ_CRU_VSD_ADDR_WEND];
+#endif
+
+	irqs[CRU_IRQ_AXI_MST_ERR_INT] = platform_get_irq_byname(pdev, rzg2l_cru_get_irq_name(CRU_IRQ_AXI_MST_ERR_INT));
+	if (irqs[CRU_IRQ_AXI_MST_ERR_INT] < 0)
+		return irqs[CRU_IRQ_AXI_MST_ERR_INT];
 
 	cru->rstc.presetn = devm_reset_control_get(&pdev->dev, "presetn");
 	if (IS_ERR(cru->rstc.presetn)) {
@@ -546,7 +578,7 @@ static int rzg2l_cru_probe(struct platform_device *pdev)
 		return PTR_ERR(cru->rstc.aresetn);
 	}
 
-	ret = rzg2l_cru_dma_register(cru, irq);
+	ret = rzg2l_cru_dma_register(cru, irqs);
 	if (ret)
 		return ret;
 
@@ -667,6 +699,7 @@ static int rzg2l_cru_suspend(struct device *dev)
 	rzg2l_cru_suspend_stop_streaming(cru);
 
 	pm_runtime_put(cru->dev);
+	cru->pm_got = false;
 
 	return 0;
 }
@@ -679,12 +712,50 @@ static int rzg2l_cru_resume(struct device *dev)
 		return 0;
 
 	pm_runtime_get_sync(cru->dev);
+	cru->pm_got = true;
 
 	queue_delayed_work_on(0, cru->work_queue, &cru->rzg2l_cru_resume,
 			      msecs_to_jiffies(CONNECTION_TIME));
 
 	return 0;
 }
+
+/**
+ * @brief	Activate runtime PM for CRU.
+ * On RZ/V2H this may be called by other drivers such as IVC
+ * @return	0 on succes, <0 on V4L2 error
+ */
+int rzv2h_cru_pm_get(struct rzg2l_cru_dev *cru)
+{
+	if ((cru->info->type == RZ_CRU_V2H) && !cru->pm_got) {
+		int ret;
+
+		pm_runtime_get_sync(cru->dev);
+		ret = v4l2_pipeline_pm_get(&cru->vdev.entity);
+		if (ret) {
+			cru_err(cru, "Failed at v4l2_pipeline_pm_get\n");
+			pm_runtime_put(cru->dev);
+			return ret;
+		}
+		cru->pm_got = true;
+	}
+	return 0;
+}
+EXPORT_SYMBOL_GPL(rzv2h_cru_pm_get);
+
+/**
+ * @brief	Deactivate runtime PM for CRU.
+ * On RZ/V2H this may be called by other drivers such as IVC
+ */
+void rzv2h_cru_pm_put(struct rzg2l_cru_dev *cru)
+{
+	if ((cru->info->type == RZ_CRU_V2H) && cru->pm_got) {
+		v4l2_pipeline_pm_put(&cru->vdev.entity);
+		pm_runtime_put(cru->dev);
+		cru->pm_got = false;
+	}
+}
+EXPORT_SYMBOL_GPL(rzv2h_cru_pm_put);
 
 static SIMPLE_DEV_PM_OPS(rzg2l_cru_pm_ops,
 			 rzg2l_cru_suspend, rzg2l_cru_resume);

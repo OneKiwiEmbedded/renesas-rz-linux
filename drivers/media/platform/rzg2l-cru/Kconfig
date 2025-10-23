@@ -21,3 +21,9 @@ config VIDEO_RZG2L_CSI2
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called rzg2l-csi2.
+
+config VIDEO_RZG2L_CRU_EMBEDDED_DATA
+	bool "Receive embedded data"
+	depends on VIDEO_RZG2L_CRU && VIDEO_RZG2L_CSI2
+	help
+	  This enables receiving embedded data.
