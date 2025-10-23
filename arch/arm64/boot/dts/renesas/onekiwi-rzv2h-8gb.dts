@@ -1,7 +1,5 @@
-// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 /*
  * Device Tree Source for the OneKiw RZ/V2H SOM board
- *
  * Copyright (C) 2025 OneKiwi Technology Co., Ltd
  */
 
@@ -570,7 +568,7 @@
 
 &pcie0 {
 	// Map all possible DDR as inbound ranges
-	dma-ranges = <0x42000000 0 0x40000000 0 0x40000000 0x2 0x00000000>;
+	dma-ranges = <0x42000000 0 0x40000000 0 0x40000000 0x4 0x00000000>;
 	status = "okay";
 };
 
