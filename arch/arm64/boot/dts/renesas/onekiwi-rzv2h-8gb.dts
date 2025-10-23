@@ -500,8 +500,9 @@
 	imx415b: imx415@1a {
 		compatible = "sony,imx415";
 		reg = <0x1a>;
-		slave-mode;
+		//slave-mode;
 		clock-names = "inck";
+		clocks = <&clk_ext_camera>;
 		ovdd-supply = <&imx415_ovdd_1v8>;
 		avdd-supply = <&imx415_avdd_2v9>;
 		dvdd-supply = <&imx415_dvdd_1v1>;
