@@ -162,6 +162,12 @@
 		states = <3300000 0 1800000 1>;
 	};
 
+	clk_32k: osc32k {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <32768>;
+	};
+
 	clk_ext_camera: clk_ext_camera {
  		compatible = "fixed-clock";
  		#clock-cells = <0>;
@@ -302,6 +308,8 @@
 		compatible = "mmc-pwrseq-simple";
 		reset-gpios = <&pinctrl RZG2L_GPIO(0, 4) GPIO_ACTIVE_HIGH>;
 		post-power-on-delay-ms = <200>;
+		clocks = <&clk_32k>;
+		clock-names = "ext_clock";
 	};
 };
 
@@ -685,6 +693,25 @@
 	status = "okay";
 };
 
+/*
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_xfer &uart0_cts &uart0_rts>;
+	status = "okay";
+
+	bluetooth {
+		compatible = "brcm,bcm43438-bt";
+		clocks = <&rk808 1>;
+		clock-names = "lpo";
+		device-wakeup-gpios = <&gpio2 RK_PD2 GPIO_ACTIVE_HIGH>;
+		host-wakeup-gpios = <&gpio0 RK_PA4 GPIO_ACTIVE_HIGH>;
+		shutdown-gpios = <&gpio0 RK_PB1 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&bt_host_wake_l &bt_wake_l &bt_reg_on_h>;
+		vbat-supply = <&vcc3v3_sys>;
+		vddio-supply = <&vcc_1v8>;
+	
+*/
 &sci2 {
 	pinctrl-0 = <&sci2_pins>;
 	pinctrl-names = "default";
@@ -692,15 +719,19 @@
 	status = "okay";
 
 	bluetooth@0 {
-		compatible = "brcm,bcm43438-bt";
+		compatible = "brcm,bcm43430a1-bt";	/* AP6212 */
+        //compatible = "brcm,bcm43438-bt";	/* AP6212A */
+		current-speed = <115200>;
 		max-speed = <3000000>;
 		/* BT_REG_ON / BT_WAKE / BT_HOST_WAKE của module */
-		reset-gpios = <&pinctrl RZG2L_GPIO(0, 1) GPIO_ACTIVE_HIGH>;  /* BT_RST_N */
-		//shutdown-gpios = <&pinctrl RZG2L_GPIO(0, 1) GPIO_ACTIVE_HIGH>; /* BT_RST */
+		//reset-gpios = <&pinctrl RZG2L_GPIO(0, 1) GPIO_ACTIVE_HIGH>;  /* BT_RST_N */
+		shutdown-gpios = <&pinctrl RZG2L_GPIO(0, 1) GPIO_ACTIVE_HIGH>; /* BT_RST */
 		//device-wakeup-gpios  = <&pinctrl RZG2L_GPIO(<PORT>, <PIN>) GPIO_ACTIVE_HIGH>;
 		//host-wakeup-gpios    = <&pinctrl RZG2L_GPIO(<PORT>, <PIN>) GPIO_ACTIVE_HIGH>;
-		//clocks = <&clk_32k>;
-		//clock-names = "lpo";
+		clocks = <&clk_32k>;
+		clock-names = "lpo";
+		vbat-supply = <&reg_3p3v>;
+		vddio-supply = <&reg_1p8v>;
 	};
 };
 
@@ -747,6 +778,35 @@
 	status = "okay";
 };
 
+/*
+&sdio0 {
+	bus-width = <4>;
+	cap-sd-highspeed;
+	cap-sdio-irq;
+	clock-frequency = <50000000>;
+	disable-wp;
+	keep-power-in-suspend;
+	max-frequency = <50000000>;
+	mmc-pwrseq = <&sdio_pwrseq>;
+	non-removable;
+	pinctrl-names = "default";
+	pinctrl-0 = <&sdio0_bus4 &sdio0_cmd &sdio0_clk>;
+	sd-uhs-sdr104;
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	brcmf: wifi@1 {
+		reg = <1>;
+		compatible = "brcm,bcm4329-fmac";
+		interrupt-parent = <&gpio0>;
+		interrupts = <RK_PA3 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "host-wake";
+		pinctrl-names = "default";
+		pinctrl-0 = <&wifi_host_wake_l>;
+	};
+};
+*/
 &sdhi2 {
 	pinctrl-0 = <&sdhi2_pins>;
 	pinctrl-names = "default";
@@ -759,6 +819,7 @@
 	keep-power-in-suspend;        /* giữ nguồn khi suspend */
 	cap-sdio-irq;                 /* cho phép SDIO IRQ (host-wake) */
 	wakeup-source;                /* cho phép đánh thức hệ thống */
+	sd-uhs-sdr104;
 
 	#address-cells = <1>;
 	#size-cells = <0>;
@@ -769,7 +830,8 @@
 
 	brcmf: wifi@1 {
 		reg = <1>;
-		compatible = "brcm,bcm4329-fmac";   /* dùng chung cho họ BCM4343x/CYW433xx */
+		compatible = "brcm,bcm43430-fmac", "brcm,bcm4329-fmac";
+		//compatible = "brcm,bcm4329-fmac";   /* dùng chung cho họ BCM4343x/CYW433xx */
 		//interrupt-parent = <&pinctrl>;
 		/* WL_HOST_WAKE → GPIO host, mức active tuỳ thiết kế (thường HIGH) */
 		interrupts = <&pinctrl RZG2L_GPIO(0, 3) IRQ_TYPE_LEVEL_HIGH>;
@@ -954,12 +1016,17 @@
 	};
 
 	sdhi2_pins: sd2 {
-		pinmux = <RZG2L_PORT_PINMUX(11, 0, 1)>, /* SD2_CLK */
-				 <RZG2L_PORT_PINMUX(11, 5, 1)>, /* SD2_CMD */
-				 <RZG2L_PORT_PINMUX(11, 1, 1)>, /* SD2_DATA0 */
-				 <RZG2L_PORT_PINMUX(11, 2, 1)>, /* SD2_DATA1 */
-				 <RZG2L_PORT_PINMUX(11, 3, 1)>, /* SD2_DATA2 */
-				 <RZG2L_PORT_PINMUX(11, 4, 1)>; /* SD2_DATA3 */
+		sd2_data {
+			pinmux = <RZG2L_PORT_PINMUX(11, 1, 1)>, /* SD2_DATA0 */
+					 <RZG2L_PORT_PINMUX(11, 2, 1)>, /* SD2_DATA1 */
+					 <RZG2L_PORT_PINMUX(11, 3, 1)>, /* SD2_DATA2 */
+					 <RZG2L_PORT_PINMUX(11, 4, 1)>; /* SD2_DATA3 */
+		};
+
+		sd2_ctrl {
+			pinmux = <RZG2L_PORT_PINMUX(11, 0, 1)>, /* SD2_CLK */
+					 <RZG2L_PORT_PINMUX(11, 5, 1)>; /* SD2_CMD */
+		};
 	};
 
 	sound_clk_pins: sound_clk {
