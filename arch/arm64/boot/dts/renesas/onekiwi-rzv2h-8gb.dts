@@ -23,10 +23,11 @@
 		serial3 = &sci3;
 		i2c1 = &i2c1;
 		i2c4 = &i2c4;
-		i2c9 = &i2c_soft;
 		i2c6 = &i2c6;
 		i2c7 = &i2c7;
-		i2c8 = &i2c8; 
+		i2c8 = &i2c8;
+		i2c9 = &i2c5_soft;
+		i2c10 = &i2c7_soft;
 		mmc0 = &sdhi0;
 		mmc1 = &sdhi1;
 		mmc2 = &sdhi2;
@@ -323,7 +324,7 @@
 
 	/* === I2C mềm (bit-bang) === */
 	
-	i2c_soft: i2c-gpio-0 {
+	i2c5_soft: i2c-gpio-5 {
 		compatible = "i2c-gpio";
 		pinctrl-names = "default";
 		//pinctrl-0 = <&i2c5_soft_pins>;
@@ -578,30 +579,7 @@
 	status = "okay";
 };
 
-&i2c_soft {
-	status = "okay";
-};
-
-&i2c5 {
-	status = "disabled";
-};
-
-&i2c6 {
-	pinctrl-0 = <&i2c6_pins>;
-	pinctrl-names = "default";
-	status = "okay";
-};
-
-&i2c7 {
-	status = "disabled";
-	//pinctrl-0 = <&i2c7_pins>;
-	//pinctrl-names = "default";
-	//status = "okay";
-};
-
-&i2c8 {
-	pinctrl-0 = <&i2c8_pins>;
-	pinctrl-names = "default";
+&i2c5_soft {
 	status = "okay";
 
 	adv7535: hdmi@3d {
@@ -639,6 +617,65 @@
 			};
 		};
 	};
+};
+
+&i2c5 {
+	status = "disabled";
+};
+
+&i2c6 {
+	pinctrl-0 = <&i2c6_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&i2c7 {
+	status = "disabled";
+	//pinctrl-0 = <&i2c7_pins>;
+	//pinctrl-names = "default";
+	//status = "okay";
+};
+
+&i2c8 {
+	pinctrl-0 = <&i2c8_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+	/*
+	adv7535: hdmi@3d {
+		compatible = "adi,adv7535";
+		reg = <0x3d>;
+
+		avdd-supply = <&reg_1p8v>;
+		dvdd-supply = <&reg_1p8v>;
+		pvdd-supply = <&reg_1p8v>;
+		a2vdd-supply = <&reg_1p8v>;
+		v3p3-supply = <&reg_3p3v>;
+		v1p2-supply = <&reg_1p8v>;
+
+		interrupt-parent = <&pinctrl>;
+		interrupts = <RZG2L_GPIO(10, 4) IRQ_TYPE_LEVEL_LOW>;
+
+		adi,dsi-lanes = <4>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				adv7535_in: endpoint@0 {
+					remote-endpoint = <&dsi0_out>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				adv7535_out: endpoint@1 {
+				remote-endpoint = <&hdmi_con_out>;
+				};
+			};
+		};
+	};*/
 
 #if CODEC_SGTLT5000
 	sgtl5000: audio-codec@a {
