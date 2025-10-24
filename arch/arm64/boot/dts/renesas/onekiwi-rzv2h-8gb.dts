@@ -326,7 +326,7 @@
 	i2c_soft: i2c-gpio-0 {
 		compatible = "i2c-gpio";
 		pinctrl-names = "default";
-		pinctrl-0 = <&i2c5_soft_pins>;
+		//pinctrl-0 = <&i2c5_soft_pins>;
 		//clock-frequency = <100000>;
 
 		sda-gpios = <&pinctrl RZG2L_GPIO(7, 2) GPIO_ACTIVE_HIGH>;
@@ -343,7 +343,7 @@
 	i2c7_soft: i2c-gpio-7 {
 		compatible = "i2c-gpio";
 		pinctrl-names = "default";
-		pinctrl-0 = <&i2c7_pins>;
+		//pinctrl-0 = <&i2c7_pins>;
 		//clock-frequency = <100000>;
 
 		sda-gpios = <&pinctrl RZG2L_GPIO(7, 6) GPIO_ACTIVE_HIGH>;
@@ -997,13 +997,13 @@
 				 <RZG2L_PORT_PINMUX(8,6,5)>; /* CAN3_TX */
 	};
 
-	i2c5_soft_pins: gpio {
-        pinmux = <RZG2L_PORT_PINMUX(7,2,0)>, /* P7_2 */
-                 <RZG2L_PORT_PINMUX(7,3,0)>; /* P7_3 */
-		drive-open-drain;
-		input-enable;
-		bias-disable;
-    };
+	//i2c5_soft_pins: gpio {
+        //pinmux = <RZG2L_PORT_PINMUX(7,2,0)>, /* P7_2 */
+                 //<RZG2L_PORT_PINMUX(7,3,0)>; /* P7_3 */
+		//drive-open-drain;
+		//input-enable;
+		//bias-disable;
+    //};
 
 	i2c1_pins: i2c1 {
 		pinmux = <RZG2L_PORT_PINMUX(3, 2, 1)>, /* I2C1_SDA */
@@ -1024,13 +1024,13 @@
 		pinmux = <RZG2L_PORT_PINMUX(7,5,1)>, /* I2C6_SCL */
 				 <RZG2L_PORT_PINMUX(7,4,1)>; /* I2C6_SDA */
 	};
-
-	i2c7_pins: i2c7 {
-		pinmux = <RZG2L_PORT_PINMUX(7,7,0)>, /* I2C7_SCL */
-				 <RZG2L_PORT_PINMUX(7,6,0)>; /* I2C7_SDA */
-		drive-open-drain;
-		input-enable;
-		bias-disable;
+	
+	//i2c7_pins: i2c7 {
+		//pinmux = <RZG2L_PORT_PINMUX(7,7,0)>, /* I2C7_SCL */
+				// <RZG2L_PORT_PINMUX(7,6,0)>; /* I2C7_SDA */
+		//drive-open-drain;
+		//input-enable;
+		//bias-disable;
 	};
 
 	i2c8_pins: i2c8 {
