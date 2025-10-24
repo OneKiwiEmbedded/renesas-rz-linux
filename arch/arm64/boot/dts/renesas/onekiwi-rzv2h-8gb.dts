@@ -9,7 +9,7 @@
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
 
-#define CODEC_SGTLT5000		0
+#define CODEC_SGTLT5000		1
 #define SINGLE_SENSOR
 
 / {
@@ -22,11 +22,8 @@
 		serial2 = &sci2;
 		serial3 = &sci3;
 		i2c1 = &i2c1;
-		i2c4 = &i2c4;
-		i2c6 = &i2c6;
-		i2c7 = &i2c7;
 		i2c8 = &i2c8;
-		i2c9 = &i2c5_soft;
+		i2c9 = &i2c5_hdmi;
 		i2c10 = &i2c7_soft;
 		mmc0 = &sdhi0;
 		mmc1 = &sdhi1;
@@ -313,25 +310,45 @@
 		clock-names = "ext_clock";
 	};
 
-	/*
-	i2c_bb_pins: i2c_bb_pins {
-		pinmux = <
-			RZG2L_PORT_PINMUX(4, 1, 0),
-			RZG2L_PORT_PINMUX(4, 2, 0);
-		>;
-		bias-pull-up;
-	};*/
-
-	/* === I2C mềm (bit-bang) === */
-	
-	i2c5_soft: i2c-gpio-5 {
+	i2c4_csi3: i2c-gpio-4 {
 		compatible = "i2c-gpio";
 		pinctrl-names = "default";
-		//pinctrl-0 = <&i2c5_soft_pins>;
-		//clock-frequency = <100000>;
+		//pinctrl-0 = <&i2c4_pins>;
+
+		sda-gpios = <&pinctrl RZG2L_GPIO(7, 0) GPIO_ACTIVE_HIGH>;
+		scl-gpios = <&pinctrl RZG2L_GPIO(7, 1) GPIO_ACTIVE_HIGH>;
+
+		i2c-gpio,delay-us = <2>;
+		i2c-gpio,timeout-ms = <500>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "okay";
+	};
+
+	i2c5_hdmi: i2c-gpio-5 {
+		compatible = "i2c-gpio";
+		pinctrl-names = "default";
+		//pinctrl-0 = <&i2c5_pins>;
 
 		sda-gpios = <&pinctrl RZG2L_GPIO(7, 2) GPIO_ACTIVE_HIGH>;
 		scl-gpios = <&pinctrl RZG2L_GPIO(7, 3) GPIO_ACTIVE_HIGH>;
+
+		i2c-gpio,delay-us = <2>;
+		i2c-gpio,timeout-ms = <500>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "okay";
+	};
+
+	i2c6_csi0: i2c-gpio-6 {
+		compatible = "i2c-gpio";
+		pinctrl-names = "default";
+		//pinctrl-0 = <&i2c6_pins>;
+
+		sda-gpios = <&pinctrl RZG2L_GPIO(7, 4) GPIO_ACTIVE_HIGH>;
+		scl-gpios = <&pinctrl RZG2L_GPIO(7, 5) GPIO_ACTIVE_HIGH>;
 
 		i2c-gpio,delay-us = <2>;
 		i2c-gpio,timeout-ms = <500>;
@@ -345,10 +362,25 @@
 		compatible = "i2c-gpio";
 		pinctrl-names = "default";
 		//pinctrl-0 = <&i2c7_pins>;
-		//clock-frequency = <100000>;
 
 		sda-gpios = <&pinctrl RZG2L_GPIO(7, 6) GPIO_ACTIVE_HIGH>;
 		scl-gpios = <&pinctrl RZG2L_GPIO(7, 7) GPIO_ACTIVE_HIGH>;
+
+		i2c-gpio,delay-us = <2>;
+		i2c-gpio,timeout-ms = <500>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "okay";
+	};
+
+	i2c9_csi2: i2c-gpio-9 {
+		compatible = "i2c-gpio";
+		pinctrl-names = "default";
+		//pinctrl-0 = <&i2c9_pins>;
+
+		sda-gpios = <&pinctrl RZG2L_GPIO(8, 2) GPIO_ACTIVE_HIGH>;
+		scl-gpios = <&pinctrl RZG2L_GPIO(8, 3) GPIO_ACTIVE_HIGH>;
 
 		i2c-gpio,delay-us = <2>;
 		i2c-gpio,timeout-ms = <500>;
@@ -573,13 +605,11 @@
  	};
 };
 
-&i2c4 {
-	pinctrl-0 = <&i2c4_pins>;
-	pinctrl-names = "default";
+&i2c4_csi3 {
 	status = "okay";
 };
 
-&i2c5_soft {
+&i2c5_hdmi {
 	status = "okay";
 
 	adv7535: hdmi@3d {
@@ -619,64 +649,19 @@
 	};
 };
 
-&i2c5 {
-	status = "disabled";
-};
-
-&i2c6 {
-	pinctrl-0 = <&i2c6_pins>;
-	pinctrl-names = "default";
+&i2c6_csi0 {
 	status = "okay";
 };
 
-&i2c7 {
-	status = "disabled";
-	//pinctrl-0 = <&i2c7_pins>;
-	//pinctrl-names = "default";
-	//status = "okay";
+&i2c7_soft {
+	status = "okay";
 };
 
 &i2c8 {
 	pinctrl-0 = <&i2c8_pins>;
 	pinctrl-names = "default";
 	status = "okay";
-	/*
-	adv7535: hdmi@3d {
-		compatible = "adi,adv7535";
-		reg = <0x3d>;
-
-		avdd-supply = <&reg_1p8v>;
-		dvdd-supply = <&reg_1p8v>;
-		pvdd-supply = <&reg_1p8v>;
-		a2vdd-supply = <&reg_1p8v>;
-		v3p3-supply = <&reg_3p3v>;
-		v1p2-supply = <&reg_1p8v>;
-
-		interrupt-parent = <&pinctrl>;
-		interrupts = <RZG2L_GPIO(10, 4) IRQ_TYPE_LEVEL_LOW>;
-
-		adi,dsi-lanes = <4>;
-
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			port@0 {
-				reg = <0>;
-				adv7535_in: endpoint@0 {
-					remote-endpoint = <&dsi0_out>;
-				};
-			};
-
-			port@1 {
-				reg = <1>;
-				adv7535_out: endpoint@1 {
-				remote-endpoint = <&hdmi_con_out>;
-				};
-			};
-		};
-	};*/
-
+	
 #if CODEC_SGTLT5000
 	sgtl5000: audio-codec@a {
 		compatible = "fsl,sgtl5000";
@@ -709,6 +694,10 @@
 		status = "okay";
 	};
 #endif
+};
+
+&i2c9_csi2 {
+	status = "okay";
 };
 
 &lens {
@@ -825,14 +814,6 @@
 	pinctrl-names = "default";
 	uart-has-rtscts;
 	status = "okay";
-};
-
-&sci5 {
-	status = "disabled";
-};
-
-&sci7 {
-	status = "disabled";
 };
 
 &sensor {
@@ -1034,50 +1015,14 @@
 				 <RZG2L_PORT_PINMUX(8,6,5)>; /* CAN3_TX */
 	};
 
-	//i2c5_soft_pins: gpio {
-        //pinmux = <RZG2L_PORT_PINMUX(7,2,0)>, /* P7_2 */
-                 //<RZG2L_PORT_PINMUX(7,3,0)>; /* P7_3 */
-		//drive-open-drain;
-		//input-enable;
-		//bias-disable;
-    //};
-
 	i2c1_pins: i2c1 {
 		pinmux = <RZG2L_PORT_PINMUX(3, 2, 1)>, /* I2C1_SDA */
 				 <RZG2L_PORT_PINMUX(3, 3, 1)>; /* I2C1_SCL */
 	};
 
-	i2c4_pins: i2c4 {
-		pinmux = <RZG2L_PORT_PINMUX(7,1,1)>, /* I2C4_SCL */
-				 <RZG2L_PORT_PINMUX(7,0,1)>; /* I2C4_SDA */
-	};
-
-	//i2c5_pins: i2c5 {
-		//pinmux = <RZG2L_PORT_PINMUX(7,3,1)>, /* I2C5_SCL */
-				 //<RZG2L_PORT_PINMUX(7,2,1)>; /* I2C5_SDA */
-	//};
-
-	i2c6_pins: i2c6 {
-		pinmux = <RZG2L_PORT_PINMUX(7,5,1)>, /* I2C6_SCL */
-				 <RZG2L_PORT_PINMUX(7,4,1)>; /* I2C6_SDA */
-	};
-	
-	//i2c7_pins: i2c7 {
-		//pinmux = <RZG2L_PORT_PINMUX(7,7,0)>, /* I2C7_SCL */
-				// <RZG2L_PORT_PINMUX(7,6,0)>; /* I2C7_SDA */
-		//drive-open-drain;
-		//input-enable;
-		//bias-disable;
-	//};
-
 	i2c8_pins: i2c8 {
 		pinmux = <RZG2L_PORT_PINMUX(0, 6, 1)>, /* I2C8_SDA */
 				 <RZG2L_PORT_PINMUX(0, 7, 1)>; /* I2C8_SCL */
-	};
-
-	i2c9_pins: i2c9 {
-		pinmux = <RZG2L_PORT_PINMUX(8,3,6)>, /* I2C9_SCL */
-				 <RZG2L_PORT_PINMUX(8,2,6)>; /* I2C9_SDA */
 	};
 
 	scif0_pins: scif0 {
