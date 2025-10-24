@@ -23,7 +23,7 @@
 		serial3 = &sci3;
 		i2c1 = &i2c1;
 		i2c4 = &i2c4;
-		i2c5 = &i2c_soft;
+		i2c9 = &i2c_soft;
 		i2c6 = &i2c6;
 		i2c7 = &i2c7;
 		i2c8 = &i2c8; 
@@ -564,12 +564,10 @@
 &i2c_soft {
 	status = "okay";
 };
-/*
+
 &i2c5 {
-	pinctrl-0 = <&i2c5_pins>;
-	pinctrl-names = "default";
-	status = "okay";
-};*/
+	status = "disabled";
+};
 
 &i2c6 {
 	pinctrl-0 = <&i2c6_pins>;
@@ -981,10 +979,10 @@
 				 <RZG2L_PORT_PINMUX(8,6,5)>; /* CAN3_TX */
 	};
 
-	i2c5_soft_pins: i2c5_soft {
-		pinmux = <RZG2L_PORT_PINMUX(7,3,0)>, /* I2C5_SCL */
-				 <RZG2L_PORT_PINMUX(7,2,0)>; /* I2C5_SDA */
-	};
+	i2c5_soft_pins: gpio {
+        pinmux = <RZG2L_PORT_PINMUX(7,2,0)>, /* P7_2 */
+                 <RZG2L_PORT_PINMUX(7,3,0)>; /* P7_3 */
+    };
 
 	i2c1_pins: i2c1 {
 		pinmux = <RZG2L_PORT_PINMUX(3, 2, 1)>, /* I2C1_SDA */
