@@ -992,10 +992,10 @@
 				 <RZG2L_PORT_PINMUX(7,0,1)>; /* I2C4_SDA */
 	};
 
-	i2c5_pins: i2c5 {
-		pinmux = <RZG2L_PORT_PINMUX(7,3,1)>, /* I2C5_SCL */
-				 <RZG2L_PORT_PINMUX(7,2,1)>; /* I2C5_SDA */
-	};
+	//i2c5_pins: i2c5 {
+		//pinmux = <RZG2L_PORT_PINMUX(7,3,1)>, /* I2C5_SCL */
+				 //<RZG2L_PORT_PINMUX(7,2,1)>; /* I2C5_SDA */
+	//};
 
 	i2c6_pins: i2c6 {
 		pinmux = <RZG2L_PORT_PINMUX(7,5,1)>, /* I2C6_SCL */
