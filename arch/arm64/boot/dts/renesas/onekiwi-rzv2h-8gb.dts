@@ -23,7 +23,7 @@
 		serial3 = &sci3;
 		i2c1 = &i2c1;
 		i2c4 = &i2c4;
-		i2c5 = &i2c5;
+		i2c5 = &i2c_soft;
 		i2c6 = &i2c6;
 		i2c7 = &i2c7;
 		i2c8 = &i2c8; 
@@ -311,6 +311,33 @@
 		clocks = <&clk_32k>;
 		clock-names = "ext_clock";
 	};
+
+	/*
+	i2c_bb_pins: i2c_bb_pins {
+		pinmux = <
+			RZG2L_PORT_PINMUX(4, 1, 0),
+			RZG2L_PORT_PINMUX(4, 2, 0);
+		>;
+		bias-pull-up;
+	};*/
+
+	/* === I2C mềm (bit-bang) === */
+	
+    i2c_soft: i2c-gpio-0 {
+        compatible = "i2c-gpio";
+        pinctrl-names = "default";
+        pinctrl-0 = <&i2c5_soft_pins>;
+
+        sda-gpios = <&pinctrl RZG2L_GPIO(7, 2) GPIO_ACTIVE_HIGH>;
+        scl-gpios = <&pinctrl RZG2L_GPIO(7, 3) GPIO_ACTIVE_HIGH>;
+
+        i2c-gpio,delay-us = <2>;
+        i2c-gpio,timeout-ms = <500>;
+
+        #address-cells = <1>;
+        #size-cells = <0>;
+        status = "okay";
+    };
 };
 
 &adc {
@@ -533,11 +560,12 @@
 	status = "okay";
 };
 
+/*
 &i2c5 {
 	pinctrl-0 = <&i2c5_pins>;
 	pinctrl-names = "default";
 	status = "okay";
-};
+};*/
 
 &i2c6 {
 	pinctrl-0 = <&i2c6_pins>;
@@ -947,6 +975,11 @@
 	can3_pins: can3 {
 		pinmux = <RZG2L_PORT_PINMUX(8,7,5)>, /* CAN3_RX */
 				 <RZG2L_PORT_PINMUX(8,6,5)>; /* CAN3_TX */
+	};
+
+	i2c5_soft_pins: i2c5_soft {
+		pinmux = <RZG2L_PORT_PINMUX(7,3,0)>, /* I2C5_SCL */
+				 <RZG2L_PORT_PINMUX(7,2,0)>; /* I2C5_SDA */
 	};
 
 	i2c1_pins: i2c1 {
