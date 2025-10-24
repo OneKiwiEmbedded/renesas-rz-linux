@@ -327,6 +327,7 @@
         compatible = "i2c-gpio";
         pinctrl-names = "default";
         pinctrl-0 = <&i2c5_soft_pins>;
+		//clock-frequency = <100000>;
 
         sda-gpios = <&pinctrl RZG2L_GPIO(7, 2) GPIO_ACTIVE_HIGH>;
         scl-gpios = <&pinctrl RZG2L_GPIO(7, 3) GPIO_ACTIVE_HIGH>;
@@ -560,6 +561,9 @@
 	status = "okay";
 };
 
+&i2c_soft {
+	status = "okay";
+};
 /*
 &i2c5 {
 	pinctrl-0 = <&i2c5_pins>;
