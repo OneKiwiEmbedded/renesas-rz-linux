@@ -489,6 +489,12 @@
 	};
 };
 
+&drp1 {
+    memory-region = <&codec0>;
+    memory-oca-region = <&opencva0>;
+    status = "okay";
+};
+
 &du {
 	status = "okay";
 };
