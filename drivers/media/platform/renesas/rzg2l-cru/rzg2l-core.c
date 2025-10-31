@@ -1,0 +1,895 @@
+// SPDX-License-Identifier: GPL-2.0+
+/*
+ * Driver for Renesas RZ/G2L CRU
+ *
+ * Copyright (C) 2022 Renesas Electronics Corp.
+ *
+ * Based on Renesas R-Car VIN
+ * Copyright (C) 2011-2013 Renesas Solutions Corp.
+ * Copyright (C) 2013 Cogent Embedded, Inc., <source@cogentembedded.com>
+ * Copyright (C) 2008 Magnus Damm
+ */
+
+#include <linux/clk.h>
+#include <linux/module.h>
+#include <linux/mod_devicetable.h>
+#include <linux/of.h>
+#include <linux/of_device.h>
+#include <linux/of_graph.h>
+#include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
+
+#include <media/v4l2-fwnode.h>
+#include <media/v4l2-mc.h>
+
+#include "rzg2l-cru.h"
+#include "rzg2l-cru-regs.h"
+
+static inline struct rzg2l_cru_dev *notifier_to_cru(struct v4l2_async_notifier *n)
+{
+	return container_of(n, struct rzg2l_cru_dev, notifier);
+}
+
+static const struct media_device_ops rzg2l_cru_media_ops = {
+	.link_notify = v4l2_pipeline_link_notify,
+};
+
+/* -----------------------------------------------------------------------------
+ * Parallel async notifier
+ */
+
+static int
+rzg2l_cru_parallel_notify_complete(struct v4l2_async_notifier *notifier)
+{
+	struct rzg2l_cru_dev *cru = notifier_to_cru(notifier);
+	struct media_entity *source;
+	struct media_entity *sink;
+	int ret;
+
+	ret = rzg2l_cru_ip_subdev_register(cru);
+	if (ret)
+		return ret;
+
+	ret = v4l2_device_register_subdev_nodes(&cru->v4l2_dev);
+	if (ret) {
+		dev_err(cru->dev, "Failed to register subdev nodes\n");
+		return ret;
+	}
+
+	ret = rzg2l_cru_video_register(cru);
+	if (ret)
+		return ret;
+
+	/*
+	 * Create media device link between PARALLEL <-> CRU IP
+	 */
+	source = &cru->parallel->subdev->entity;
+	sink = &cru->ip.subdev.entity;
+	ret = media_create_pad_link(source, 0, sink, 0,
+				    MEDIA_LNK_FL_ENABLED |
+				    MEDIA_LNK_FL_IMMUTABLE);
+	if (ret) {
+		dev_err(cru->dev, "Error creating link from %s to %s\n",
+			source->name, sink->name);
+		return ret;
+	}
+	cru->ip.remote = cru->parallel->subdev;
+
+	/* Create media device link between CRU IP <-> CRU OUTPUT */
+	source = &cru->ip.subdev.entity;
+	sink = &cru->vdev.entity;
+	ret = media_create_pad_link(source, 1, sink, 0,
+				    MEDIA_LNK_FL_ENABLED |
+				    MEDIA_LNK_FL_IMMUTABLE);
+	if (ret) {
+		dev_err(cru->dev, "Error creating link from %s to %s\n",
+			source->name, sink->name);
+		return ret;
+	}
+
+	return ret;
+}
+
+static void
+rzg2l_cru_parallel_notify_unbind(struct v4l2_async_notifier *notifier,
+				 struct v4l2_subdev *subdev,
+				 struct v4l2_async_subdev *asd)
+{
+	struct rzg2l_cru_dev *cru = notifier_to_cru(notifier);
+	struct v4l2_async_subdev *asd_subdev = &cru->parallel->asd;
+
+	rzg2l_cru_ip_subdev_unregister(cru);
+
+	mutex_lock(&cru->lock);
+
+	if (asd_subdev == asd) {
+		cru->parallel->subdev = NULL;
+		dev_dbg(cru->dev, "Unbind Parallel %s\n", subdev->name);
+	}
+
+	mutex_unlock(&cru->lock);
+}
+
+static int rzg2l_cru_parallel_notify_bound(struct v4l2_async_notifier *notifier,
+					   struct v4l2_subdev *subdev,
+					   struct v4l2_async_subdev *asd)
+{
+	struct rzg2l_cru_dev *cru = notifier_to_cru(notifier);
+	struct v4l2_async_subdev *asd_subdev = &cru->parallel->asd;
+
+	mutex_lock(&cru->lock);
+	if (asd_subdev == asd) {
+		cru->parallel->subdev = subdev;
+		dev_dbg(cru->dev, "Bound Parallel %s\n", subdev->name);
+	}
+	mutex_unlock(&cru->lock);
+
+	return 0;
+}
+
+static const struct v4l2_async_notifier_operations
+rzg2l_cru_parallel_notify_ops = {
+	.bound = rzg2l_cru_parallel_notify_bound,
+	.unbind = rzg2l_cru_parallel_notify_unbind,
+	.complete = rzg2l_cru_parallel_notify_complete,
+};
+
+static int rzg2l_cru_parallel_parse_v4l2(struct device *dev,
+					 struct v4l2_fwnode_endpoint *vep,
+					 struct v4l2_async_subdev *asd)
+{
+	struct rzg2l_cru_dev *cru = dev_get_drvdata(dev);
+	struct rzg2l_cru_parallel *rvpe =
+			container_of(asd, struct rzg2l_cru_parallel, asd);
+
+	if (vep->base.port || vep->base.id)
+		return -ENOTCONN;
+
+	cru->parallel = rvpe;
+	cru->parallel->mbus_type = vep->bus_type;
+
+	switch (cru->parallel->mbus_type) {
+	case V4L2_MBUS_PARALLEL:
+		dev_dbg(cru->dev, "Found PARALLEL media bus\n");
+		cru->parallel->mbus_flags = vep->bus.parallel.flags;
+		break;
+	case V4L2_MBUS_BT656:
+		dev_dbg(cru->dev, "Found BT656 media bus\n");
+		cru->parallel->mbus_flags = 0;
+		break;
+	default:
+		dev_err(cru->dev, "Unknown media bus type\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int rzg2l_cru_parallel_init(struct rzg2l_cru_dev *cru)
+{
+	int ret;
+
+	v4l2_async_nf_init(&cru->notifier);
+	ret = v4l2_async_nf_parse_fwnode_endpoints(
+				cru->dev, &cru->notifier,
+				sizeof(struct rzg2l_cru_parallel),
+				rzg2l_cru_parallel_parse_v4l2);
+	if (ret)
+		return ret;
+
+	/* If using mc, it's fine not to have any input registered. */
+	if (!cru->parallel)
+		return 0;
+
+	dev_dbg(cru->dev, "Found parallel subdevice %pOF\n",
+		to_of_node(cru->parallel->asd.match.fwnode));
+
+	cru->notifier.ops = &rzg2l_cru_parallel_notify_ops;
+	ret = v4l2_async_nf_register(&cru->v4l2_dev, &cru->notifier);
+	if (ret < 0) {
+		dev_err(cru->dev, "Notifier registration failed\n");
+		v4l2_async_nf_cleanup(&cru->notifier);
+		return ret;
+	}
+
+	return 0;
+}
+
+
+/* -----------------------------------------------------------------------------
+ * Group async notifier
+ */
+
+static int rzg2l_cru_group_notify_complete(struct v4l2_async_notifier *notifier)
+{
+	struct rzg2l_cru_dev *cru = notifier_to_cru(notifier);
+	struct media_entity *source, *sink;
+	int ret;
+
+	ret = rzg2l_cru_ip_subdev_register(cru);
+	if (ret)
+		return ret;
+
+	ret = v4l2_device_register_subdev_nodes(&cru->v4l2_dev);
+	if (ret) {
+		dev_err(cru->dev, "Failed to register subdev nodes\n");
+		return ret;
+	}
+
+	ret = rzg2l_cru_video_register(cru);
+	if (ret)
+		return ret;
+
+	/*
+	 * CRU can be connected either to CSI2 or PARALLEL device
+	 * For now we are only supporting CSI2
+	 *
+	 * Create media device link between CSI-2 <-> CRU IP
+	 */
+	source = &cru->csi.subdev->entity;
+	sink = &cru->ip.subdev.entity;
+	ret = media_create_pad_link(source, 1, sink, 0,
+				    MEDIA_LNK_FL_ENABLED |
+				    MEDIA_LNK_FL_IMMUTABLE);
+	if (ret) {
+		dev_err(cru->dev, "Error creating link from %s to %s\n",
+			source->name, sink->name);
+		return ret;
+	}
+	cru->ip.remote = cru->csi.subdev;
+
+	/* Create media device link between CRU IP <-> CRU OUTPUT */
+	source = &cru->ip.subdev.entity;
+	sink = &cru->vdev.entity;
+	ret = media_create_pad_link(source, 1, sink, 0,
+				    MEDIA_LNK_FL_ENABLED |
+				    MEDIA_LNK_FL_IMMUTABLE);
+	if (ret) {
+		dev_err(cru->dev, "Error creating link from %s to %s\n",
+			source->name, sink->name);
+		return ret;
+	}
+
+	return 0;
+}
+
+static void rzg2l_cru_group_notify_unbind(struct v4l2_async_notifier *notifier,
+					  struct v4l2_subdev *subdev,
+					  struct v4l2_async_subdev *asd)
+{
+	struct rzg2l_cru_dev *cru = notifier_to_cru(notifier);
+
+	rzg2l_cru_ip_subdev_unregister(cru);
+
+	mutex_lock(&cru->mdev_lock);
+
+	if (cru->csi.asd == asd) {
+		cru->csi.subdev = NULL;
+		dev_dbg(cru->dev, "Unbind CSI-2 %s\n", subdev->name);
+	}
+
+	mutex_unlock(&cru->mdev_lock);
+}
+
+static int rzg2l_cru_group_notify_bound(struct v4l2_async_notifier *notifier,
+					struct v4l2_subdev *subdev,
+					struct v4l2_async_subdev *asd)
+{
+	struct rzg2l_cru_dev *cru = notifier_to_cru(notifier);
+
+	mutex_lock(&cru->mdev_lock);
+
+	if (cru->csi.asd == asd) {
+		cru->csi.subdev = subdev;
+		dev_dbg(cru->dev, "Bound CSI-2 %s\n", subdev->name);
+	}
+
+	mutex_unlock(&cru->mdev_lock);
+
+	return 0;
+}
+
+static const struct v4l2_async_notifier_operations rzg2l_cru_async_ops = {
+	.bound = rzg2l_cru_group_notify_bound,
+	.unbind = rzg2l_cru_group_notify_unbind,
+	.complete = rzg2l_cru_group_notify_complete,
+};
+
+static int rzg2l_cru_s_ctrl(struct v4l2_ctrl *ctrl)
+{
+	struct rzg2l_cru_dev *cru = container_of(ctrl->handler,
+						 struct rzg2l_cru_dev,
+						 ctrl_handler);
+	int ret = 0, order;
+
+	switch (ctrl->id) {
+	case V4L2_CID_CRU_LINEAR_MATRIX_ROF:
+	case V4L2_CID_CRU_LINEAR_MATRIX_GOF:
+	case V4L2_CID_CRU_LINEAR_MATRIX_BOF:
+		order = ctrl->id - V4L2_CID_CRU_LINEAR_MATRIX_ROF;
+		cru->linear_matrix_rgb_offset[order] = ctrl->val;
+		break;
+	case V4L2_CID_CRU_LINEAR_MATRIX_RR:
+	case V4L2_CID_CRU_LINEAR_MATRIX_RG:
+	case V4L2_CID_CRU_LINEAR_MATRIX_RB:
+		order = ctrl->id - V4L2_CID_CRU_LINEAR_MATRIX_RR;
+		cru->linear_matrix_r[order] = ctrl->val;
+		break;
+	case V4L2_CID_CRU_LINEAR_MATRIX_GR:
+	case V4L2_CID_CRU_LINEAR_MATRIX_GG:
+	case V4L2_CID_CRU_LINEAR_MATRIX_GB:
+		order = ctrl->id - V4L2_CID_CRU_LINEAR_MATRIX_GR;
+		cru->linear_matrix_g[order] = ctrl->val;
+		break;
+	case V4L2_CID_CRU_LINEAR_MATRIX_BR:
+	case V4L2_CID_CRU_LINEAR_MATRIX_BG:
+	case V4L2_CID_CRU_LINEAR_MATRIX_BB:
+		order = ctrl->id - V4L2_CID_CRU_LINEAR_MATRIX_BR;
+		cru->linear_matrix_b[order] = ctrl->val;
+		break;
+	default:
+		if ((cru->state == RZG2L_CRU_DMA_STOPPED) ||
+		   (cru->state == RZG2L_CRU_DMA_STOPPING)) {
+			switch (ctrl->id) {
+			case V4L2_CID_CRU_LINEAR_MATRIX:
+				cru->is_linear_matrix_enable = ctrl->val;
+				break;
+			case V4L2_CID_MIN_BUFFERS_FOR_CAPTURE:
+				cru->num_buf = ctrl->val;
+				break;
+			case V4L2_CID_CRU_FRAME_SKIP:
+				cru->frame_skip = ctrl->val;
+				break;
+			case V4L2_CID_CRU_STATISTICS:
+				cru->is_statistics = ctrl->val;
+				break;
+			case V4L2_CID_CRU_SD_BLKSIZE:
+				cru->sd_blksize = ctrl->val;
+				break;
+			case V4L2_CID_CRU_SD_STHPOS:
+				cru->sd_sthpos = ctrl->val;
+				break;
+			case V4L2_CID_CRU_SD_STSADPOS:
+				cru->sd_stsadpos = ctrl->val;
+				break;
+			default:
+				ret = -EINVAL;
+				break;
+			}
+		} else {
+			ret = -EBUSY;
+
+			break;
+		}
+	};
+
+	return ret;
+}
+
+static const struct v4l2_ctrl_ops rzg2l_cru_ctrl_ops = {
+	.s_ctrl = rzg2l_cru_s_ctrl,
+};
+
+static int rzg2l_cru_mc_parse_of(struct rzg2l_cru_dev *cru)
+{
+	struct v4l2_fwnode_endpoint vep = {
+		.bus_type = V4L2_MBUS_CSI2_DPHY,
+	};
+	struct fwnode_handle *ep, *fwnode;
+	struct v4l2_async_subdev *asd;
+	int ret;
+
+	ep = fwnode_graph_get_endpoint_by_id(dev_fwnode(cru->dev), 1, 0, 0);
+	if (!ep)
+		return 0;
+
+	fwnode = fwnode_graph_get_remote_endpoint(ep);
+	ret = v4l2_fwnode_endpoint_parse(ep, &vep);
+	fwnode_handle_put(ep);
+	if (ret) {
+		dev_err(cru->dev, "Failed to parse %pOF\n", to_of_node(fwnode));
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (!of_device_is_available(to_of_node(fwnode))) {
+		dev_dbg(cru->dev, "OF device %pOF disabled, ignoring\n",
+			to_of_node(fwnode));
+		ret = -ENOTCONN;
+		goto out;
+	}
+
+	asd = v4l2_async_nf_add_fwnode(&cru->notifier, fwnode,
+				       struct v4l2_async_subdev);
+	if (IS_ERR(asd)) {
+		ret = PTR_ERR(asd);
+		goto out;
+	}
+
+	cru->csi.asd = asd;
+
+	dev_dbg(cru->dev, "Added OF device %pOF to slot %u\n",
+		to_of_node(fwnode), vep.base.id);
+out:
+	fwnode_handle_put(fwnode);
+
+	return ret;
+}
+
+static int rzg2l_cru_mc_parse_of_graph(struct rzg2l_cru_dev *cru)
+{
+	int ret;
+
+	v4l2_async_nf_init(&cru->notifier);
+
+	ret = rzg2l_cru_mc_parse_of(cru);
+	if (ret)
+		return ret;
+
+	if (list_empty(&cru->notifier.asd_list))
+		return 0;
+
+	cru->is_csi = true;
+
+	cru->notifier.ops = &rzg2l_cru_async_ops;
+
+	ret = v4l2_async_nf_register(&cru->v4l2_dev, &cru->notifier);
+	if (ret < 0) {
+		dev_err(cru->dev, "Notifier registration failed\n");
+		v4l2_async_nf_cleanup(&cru->notifier);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int rzg2l_cru_media_init(struct rzg2l_cru_dev *cru)
+{
+	struct media_device *mdev = NULL;
+	const struct of_device_id *match;
+	int ret;
+
+	cru->pad.flags = MEDIA_PAD_FL_SINK | MEDIA_PAD_FL_MUST_CONNECT;
+	ret = media_entity_pads_init(&cru->vdev.entity, 1, &cru->pad);
+	if (ret)
+		return ret;
+
+	if (cru->info->max_cru_channels > 1) {
+		ret = of_property_read_u32(cru->dev->of_node, "channel,id", &cru->id);
+		if (ret) {
+			if (cru->info->cru_type == RZV2H_CRU_TYPE) {
+				dev_err(cru->dev, "%pOF: No channel,id property found\n",
+						cru->dev->of_node);
+				return -EINVAL;
+			}
+			cru->id = 0;
+		}
+	}
+
+	if (cru->id >= cru->info->max_cru_channels) {
+		dev_err(cru->dev, "%pOF: Invalid channel,id '%u'\n",
+			cru->dev->of_node, cru->id);
+		return -EINVAL;
+	}
+
+	mutex_init(&cru->mdev_lock);
+	mdev = &cru->mdev;
+	mdev->dev = cru->dev;
+	mdev->ops = &rzg2l_cru_media_ops;
+
+	match = of_match_node(cru->dev->driver->of_match_table,
+			      cru->dev->of_node);
+
+	strscpy(mdev->driver_name, KBUILD_MODNAME, sizeof(mdev->driver_name));
+	strscpy(mdev->model, match->compatible, sizeof(mdev->model));
+
+	cru->v4l2_dev.mdev = &cru->mdev;
+
+	media_device_init(mdev);
+
+	ret = rzg2l_cru_mc_parse_of_graph(cru);
+	if (ret) {
+		mutex_lock(&cru->mdev_lock);
+		cru->v4l2_dev.mdev = NULL;
+		mutex_unlock(&cru->mdev_lock);
+	}
+
+	return 0;
+}
+
+static int rzg2l_cru_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct rzg2l_cru_dev *cru;
+	struct v4l2_ctrl *ctrl;
+	int irq, ret, i;
+	int num_ctrls;
+
+	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
+	if (ret)
+		return ret;
+
+	cru = devm_kzalloc(dev, sizeof(*cru), GFP_KERNEL);
+	if (!cru)
+		return -ENOMEM;
+
+	cru->base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(cru->base))
+		return PTR_ERR(cru->base);
+
+	cru->presetn = devm_reset_control_get_shared(dev, "presetn");
+	if (IS_ERR(cru->presetn))
+		return dev_err_probe(dev, PTR_ERR(cru->presetn),
+				     "Failed to get cpg presetn\n");
+
+	cru->aresetn = devm_reset_control_get_exclusive(dev, "aresetn");
+	if (IS_ERR(cru->aresetn))
+		return dev_err_probe(dev, PTR_ERR(cru->aresetn),
+				     "Failed to get cpg aresetn\n");
+
+	cru->vclk = devm_clk_get(dev, "video");
+	if (IS_ERR(cru->vclk))
+		return dev_err_probe(dev, PTR_ERR(cru->vclk),
+				     "Failed to get video clock\n");
+
+	cru->dev = dev;
+	cru->info = of_device_get_match_data(dev);
+
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0)
+		return irq;
+
+	ret = devm_request_irq(dev, irq, cru->info->irq_handler, 0,
+			       KBUILD_MODNAME, cru);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to request irq\n");
+
+	platform_set_drvdata(pdev, cru);
+
+	ret = rzg2l_cru_dma_register(cru);
+	if (ret)
+		return ret;
+
+	cru->num_buf = RZG2L_CRU_HW_BUFFER_DEFAULT;
+	pm_suspend_ignore_children(dev, true);
+	ret = devm_pm_runtime_enable(dev);
+	if (ret)
+		goto error_dma_unregister;
+
+	cru->is_csi = false;
+	ret = rzg2l_cru_media_init(cru);
+	if (ret)
+		goto error_dma_unregister;
+
+	/* Add the control about minimum amount of buffers */
+	num_ctrls = ARRAY_SIZE(rzg2l_cru_ctrls);
+	v4l2_ctrl_handler_init(&cru->ctrl_handler, num_ctrls + 1);
+	ctrl = v4l2_ctrl_new_std(&cru->ctrl_handler, &rzg2l_cru_ctrl_ops,
+				 V4L2_CID_MIN_BUFFERS_FOR_CAPTURE,
+				 1, RZG2L_CRU_HW_BUFFER_MAX, 1,
+				 RZG2L_CRU_HW_BUFFER_DEFAULT);
+
+	ctrl->flags &= ~V4L2_CTRL_FLAG_READ_ONLY;
+
+	for (i = 0; i < num_ctrls; i++) {
+		if ((cru->info->cru_type == RZV2H_CRU_TYPE) &&
+		    (rzg2l_cru_ctrls[i].id >= V4L2_CID_CRU_LINEAR_MATRIX) &&
+		    (rzg2l_cru_ctrls[i].id <= V4L2_CID_CRU_SD_STSADPOS))
+			continue;
+		v4l2_ctrl_new_custom(&cru->ctrl_handler,
+				     &rzg2l_cru_ctrls[i], NULL);
+	}
+
+	v4l2_ctrl_handler_setup(&cru->ctrl_handler);
+
+	if (cru->ctrl_handler.error) {
+		dev_err(&pdev->dev, "%s: control initialization error %d\n",
+				    __func__, cru->ctrl_handler.error);
+		ret = cru->ctrl_handler.error;
+		goto free_ctrl;
+	}
+
+	cru->v4l2_dev.ctrl_handler = &cru->ctrl_handler;
+
+	if (!cru->is_csi) {
+		ret = rzg2l_cru_parallel_init(cru);
+		if (ret)
+			goto free_ctrl;
+	}
+
+	cru->work_queue =  create_singlethread_workqueue(dev_name(cru->dev));
+	if (!cru->work_queue) {
+		ret = -ENOMEM;
+		goto error_dma_unregister;
+	}
+	INIT_DELAYED_WORK(&cru->rzg2l_cru_resume, rzg2l_cru_resume_start_streaming);
+
+	return 0;
+
+free_ctrl:
+	v4l2_ctrl_handler_free(&cru->ctrl_handler);
+
+error_dma_unregister:
+	rzg2l_cru_dma_unregister(cru);
+
+	return ret;
+}
+
+static int rzg2l_cru_remove(struct platform_device *pdev)
+{
+	struct rzg2l_cru_dev *cru = platform_get_drvdata(pdev);
+
+	v4l2_async_nf_unregister(&cru->notifier);
+	v4l2_async_nf_cleanup(&cru->notifier);
+
+	rzg2l_cru_video_unregister(cru);
+	media_device_cleanup(&cru->mdev);
+	mutex_destroy(&cru->mdev_lock);
+
+	rzg2l_cru_dma_unregister(cru);
+
+	return 0;
+}
+
+static const u16 rzg3e_cru_regs[] = {
+	[CRUnCTRL] = 0x0,
+	[CRUnIE] = 0x4,
+	[CRUnIE2] = 0x8,
+	[CRUnINTS] = 0xc,
+	[CRUnINTS2] = 0x10,
+	[CRUnRST] = 0x18,
+	[AMnMB1ADDRL] = 0x40,
+	[AMnMB1ADDRH] = 0x44,
+	[AMnMB2ADDRL] = 0x48,
+	[AMnMB2ADDRH] = 0x4c,
+	[AMnMB3ADDRL] = 0x50,
+	[AMnMB3ADDRH] = 0x54,
+	[AMnMB4ADDRL] = 0x58,
+	[AMnMB4ADDRH] = 0x5c,
+	[AMnMB5ADDRL] = 0x60,
+	[AMnMB5ADDRH] = 0x64,
+	[AMnMB6ADDRL] = 0x68,
+	[AMnMB6ADDRH] = 0x6c,
+	[AMnMB7ADDRL] = 0x70,
+	[AMnMB7ADDRH] = 0x74,
+	[AMnMB8ADDRL] = 0x78,
+	[AMnMB8ADDRH] = 0x7c,
+	[AMnUVAOFL] = 0x080,
+	[AMnUVAOFH] = 0x084,
+	[AMnMBVALID] = 0x88,
+	[AMnMADRSL] = 0x8c,
+	[AMnMADRSH] = 0x90,
+	[AMnAXIATTR] = 0xec,
+	[AMnFIFO] = 0x0F0,
+	[AMnFIFOPNTR] = 0xf8,
+	[AMnAXISTP] = 0x110,
+	[AMnAXISTPACK] = 0x114,
+	[AMnIS] = 0x128,
+	[AMnSDMB1ADDRL] = 0x13C,
+	[AMnSDMB1ADDRH] = 0x140,
+	[AMnSDMB2ADDRL] = 0x144,
+	[AMnSDMB2ADDRH] = 0x148,
+	[AMnSDMB3ADDRL] = 0x14C,
+	[AMnSDMB3ADDRH] = 0x150,
+	[AMnSDMB4ADDRL] = 0x154,
+	[AMnSDMB4ADDRH] = 0x158,
+	[AMnSDMB5ADDRL] = 0x15C,
+	[AMnSDMB5ADDRH] = 0x160,
+	[AMnSDMB6ADDRL] = 0x164,
+	[AMnSDMB6ADDRH] = 0x168,
+	[AMnSDMB7ADDRL] = 0x16C,
+	[AMnSDMB7ADDRH] = 0x170,
+	[AMnSDMB8ADDRL] = 0x174,
+	[AMnSDMB8ADDRH] = 0x178,
+	[AMnSDMBVALID] = 0x18C,
+	[AMnSDMBS] = 0x190,
+	[AMnSDFIFOPNTR] = 0x1C0,
+	[AMnSDAXISTP] = 0x1D8,
+	[AMnSDAXISTPACK] = 0x1DC,
+	[ICnEN] = 0x1f0,
+	[ICnREGC] = 0x244,
+	[ICnSVCNUM] = 0x1f8,
+	[ICnSVC] = 0x1fc,
+	[ICnIPMC_C0] = 0x200,
+	[ICnLMXOF] = 0x220,
+	[ICnLMXRC1] = 0x224,
+	[ICnLMXRC2] = 0x228,
+	[ICnLMXGC1] = 0x22C,
+	[ICnLMXGC2] = 0x230,
+	[ICnLMXBC1] = 0x234,
+	[ICnLMXBC2] = 0x238,
+	[ICnSTIC1] = 0x23C,
+	[ICnMS] = 0x2d8,
+	[ICnDMR] = 0x304,
+};
+
+static const struct rzg2l_cru_info rzg3e_cru_info = {
+	.cru_type = RZV2H_CRU_TYPE,
+	.max_width = 4095,
+	.max_height = 4095,
+	.image_conv = ICnIPMC_C0,
+	.has_stride = true,
+	.regs = rzg3e_cru_regs,
+	.irq_handler = rzg3e_cru_irq,
+	.enable_interrupts = rzg3e_cru_enable_interrupts,
+	.disable_interrupts = rzg3e_cru_disable_interrupts,
+	.fifo_empty = rzg3e_fifo_empty,
+	.csi_setup = rzg3e_cru_csi2_setup,
+	.max_cru_channels = 1,
+};
+
+static const struct rzg2l_cru_info rzv2h_cru_info = {
+	.cru_type = RZV2H_CRU_TYPE,
+	.max_width = 4095,
+	.max_height = 4095,
+	.image_conv = ICnIPMC_C0,
+	.has_stride = true,
+	.regs = rzg3e_cru_regs,
+	.irq_handler = rzg3e_cru_irq,
+	.enable_interrupts = rzg3e_cru_enable_interrupts,
+	.disable_interrupts = rzg3e_cru_disable_interrupts,
+	.fifo_empty = rzg3e_fifo_empty,
+	.csi_setup = rzg3e_cru_csi2_setup,
+	.max_cru_channels = 4,
+};
+
+static const u16 rzg2l_cru_regs[] = {
+	[CRUnCTRL] = 0x0,
+	[CRUnIE] = 0x4,
+	[CRUnINTS] = 0x8,
+	[CRUnRST] = 0xc,
+	[AMnMB1ADDRL] = 0x100,
+	[AMnMB1ADDRH] = 0x104,
+	[AMnMB2ADDRL] = 0x108,
+	[AMnMB2ADDRH] = 0x10c,
+	[AMnMB3ADDRL] = 0x110,
+	[AMnMB3ADDRH] = 0x114,
+	[AMnMB4ADDRL] = 0x118,
+	[AMnMB4ADDRH] = 0x11c,
+	[AMnMB5ADDRL] = 0x120,
+	[AMnMB5ADDRH] = 0x124,
+	[AMnMB6ADDRL] = 0x128,
+	[AMnMB6ADDRH] = 0x12c,
+	[AMnMB7ADDRL] = 0x130,
+	[AMnMB7ADDRH] = 0x134,
+	[AMnMB8ADDRL] = 0x138,
+	[AMnMB8ADDRH] = 0x13c,
+	[AMnUVAOFL] = 0x140,
+	[AMnUVAOFH] = 0x144,
+	[AMnMBVALID] = 0x148,
+	[AMnMBS] = 0x14c,
+	[AMnAXIATTR] = 0x158,
+	[AMnFIFO] = 0x160,
+	[AMnFIFOPNTR] = 0x168,
+	[AMnAXISTP] = 0x174,
+	[AMnAXISTPACK] = 0x178,
+	[AMnSDMB1ADDRL] = 0x190,
+	[AMnSDMB1ADDRH] = 0x194,
+	[AMnSDMB2ADDRL] = 0x198,
+	[AMnSDMB2ADDRH] = 0x19C,
+	[AMnSDMB3ADDRL] = 0x1A0,
+	[AMnSDMB3ADDRH] = 0x1A4,
+	[AMnSDMB4ADDRL] = 0x1A8,
+	[AMnSDMB4ADDRH] = 0x1AC,
+	[AMnSDMB5ADDRL] = 0x1B0,
+	[AMnSDMB5ADDRH] = 0x1B4,
+	[AMnSDMB6ADDRL] = 0x1B8,
+	[AMnSDMB6ADDRH] = 0x1BC,
+	[AMnSDMB7ADDRL] = 0x1C0,
+	[AMnSDMB7ADDRH] = 0x1C4,
+	[AMnSDMB8ADDRL] = 0x1C8,
+	[AMnSDMB8ADDRH] = 0x1CC,
+	[AMnSDMBVALID] = 0x1D0,
+	[AMnSDMBS] = 0x1D4,
+	[AMnSDAXIATTR] = 0x1D8,
+	[AMnSDFIFOPNTR] = 0x1E8,
+	[AMnSDAXISTP] = 0x1F4,
+	[AMnSDAXISTPACK] = 0x1F8,
+	[ICnEN] = 0x200,
+	[ICnREGC] = 0x204,
+	[ICnMC] = 0x208,
+	[ICnLMXOF] = 0x224,
+	[ICnLMXRC1] = 0x228,
+	[ICnLMXRC2] = 0x22C,
+	[ICnLMXGC1] = 0x230,
+	[ICnLMXGC2] = 0x234,
+	[ICnLMXBC1] = 0x238,
+	[ICnLMXBC2] = 0x23C,
+	[ICnSTIC1] = 0x240,
+	[ICnSTIC2] = 0x244,
+	[ICnPIFC] = 0x250,
+	[ICnMS] = 0x254,
+	[ICnDMR] = 0x26c,
+};
+
+static const struct rzg2l_cru_info rzg2l_cru_info = {
+	.cru_type = RZG2L_CRU_TYPE,
+	.max_width = 2800,
+	.max_height = 4095,
+	.image_conv = ICnMC,
+	.regs = rzg2l_cru_regs,
+	.irq_handler = rzg2l_cru_irq,
+	.enable_interrupts = rzg2l_cru_enable_interrupts,
+	.disable_interrupts = rzg2l_cru_disable_interrupts,
+	.fifo_empty = rzg2l_fifo_empty,
+	.csi_setup = rzg2l_cru_csi2_setup,
+	.max_cru_channels = 1,
+};
+
+static int rzg2l_cru_suspend(struct device *dev)
+{
+	struct rzg2l_cru_dev *cru = dev_get_drvdata(dev);
+
+	if ((cru->state == RZG2L_CRU_DMA_STOPPED) ||
+	   (cru->state == RZG2L_CRU_DMA_STOPPING))
+		return 0;
+
+	rzg2l_cru_suspend_stop_streaming(cru);
+	if (!(reset_control_status(cru->presetn)))
+		reset_control_assert(cru->presetn);
+	reset_control_assert(cru->aresetn);
+
+	clk_disable_unprepare(cru->vclk);
+	pm_runtime_put_sync(dev);
+
+	return 0;
+
+}
+
+static int rzg2l_cru_resume(struct device *dev)
+{
+	struct rzg2l_cru_dev *cru = dev_get_drvdata(dev);
+
+	if ((cru->state == RZG2L_CRU_DMA_STOPPED) ||
+	   (cru->state == RZG2L_CRU_DMA_STOPPING))
+		return 0;
+
+	reset_control_deassert(cru->aresetn);
+	if (reset_control_status(cru->presetn) > 0)
+		reset_control_deassert(cru->presetn);
+
+	pm_runtime_resume_and_get(dev);
+	clk_prepare_enable(cru->vclk);
+
+	queue_delayed_work_on(0, cru->work_queue, &cru->rzg2l_cru_resume,
+				msecs_to_jiffies(CONNECTION_TIME));
+	return 0;
+
+}
+
+static const struct dev_pm_ops rzg2l_cru_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(rzg2l_cru_suspend, rzg2l_cru_resume)
+};
+
+static const struct of_device_id rzg2l_cru_of_id_table[] = {
+	{
+		.compatible = "renesas,r9a09g047-cru",
+		.data = &rzg3e_cru_info,
+	},
+	{
+		.compatible = "renesas,r9a09g057-cru",
+		.data = &rzv2h_cru_info,
+	},
+	{
+		.compatible = "renesas,rzg2l-cru",
+		.data = &rzg2l_cru_info,
+	},
+	{ /* sentinel */ }
+};
+MODULE_DEVICE_TABLE(of, rzg2l_cru_of_id_table);
+
+static struct platform_driver rzg2l_cru_driver = {
+	.driver = {
+		.name = "rzg2l-cru",
+		.of_match_table = rzg2l_cru_of_id_table,
+		.pm = &rzg2l_cru_pm_ops,
+	},
+	.probe = rzg2l_cru_probe,
+	.remove = rzg2l_cru_remove,
+};
+
+module_platform_driver(rzg2l_cru_driver);
+
+MODULE_AUTHOR("Lad Prabhakar <prabhakar.mahadev-lad.rj@bp.renesas.com>");
+MODULE_DESCRIPTION("Renesas RZ/G2L CRU driver");
+MODULE_LICENSE("GPL");
