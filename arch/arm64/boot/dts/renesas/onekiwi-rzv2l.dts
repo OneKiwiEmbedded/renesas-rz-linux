@@ -12,8 +12,8 @@
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
 
-#define HDMI_ADV7535	1
-#define HDMI_LT9611		0
+#define HDMI_ADV7535	0
+#define HDMI_LT9611		1
 #define PANEL_PH720128	0
 
 / {
@@ -52,6 +52,20 @@
 		port {
 			hdmi_con_out: endpoint {
 				remote-endpoint = <&adv7535_out>;
+			};
+		};
+	};
+#endif
+
+#if HDMI_LT9611
+	hdmi-out {
+		compatible = "hdmi-connector";
+		label = "hdmi";
+		type = "d";
+
+		port {
+			hdmi_con_out: endpoint {
+				remote-endpoint = <&lt9611_out>;
 			};
 		};
 	};
@@ -328,7 +342,7 @@
 		port@1 {
 			dsi_out: endpoint {
 				remote-endpoint = <&lt9611_in>;
-				data-lanes = <0 1 2 3>;
+				ddata-lanes = <1 2 3 4>;
 			};
 		};
 	};
@@ -368,6 +382,10 @@
 &du {
 	status = "okay";
 #if HDMI_ADV7535
+	dsi-lanes = <4>;
+#endif
+
+#if HDMI_LT9611
 	dsi-lanes = <4>;
 #endif
 
@@ -488,10 +506,6 @@
 		reg = <0x3b>;
 		reset-gpios = <&pinctrl RZG2L_GPIO(43, 3) GPIO_ACTIVE_HIGH>;
 		interrupts-extended = <&pinctrl RZG2L_GPIO(1, 1) IRQ_TYPE_EDGE_FALLING>;
-
-		//reset-gpios = <&pinctrl RZG2L_GPIO(43, 3) GPIO_ACTIVE_LOW>;
-		//interrupts = <&pinctrl RZG2L_GPIO(1, 1) GPIO_ACTIVE_LOW>;
-
 		vdd-supply = <&reg_1p8v>;
 		vcc-supply = <&reg_3p3v>;
 
@@ -502,6 +516,7 @@
 				reg = <0>;
 				lt9611_in: endpoint {
 					remote-endpoint = <&dsi_out>;
+					data-lanes = <1 2 3 4>;
 				};
 			};
 			port@1 {
