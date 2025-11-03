@@ -13,7 +13,8 @@
 #include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
 
 #define HDMI_ADV7535	0
-#define HDMI_LT9611		1
+#define HDMI_LT8912B	1
+#define HDMI_LT9611		0
 #define PANEL_PH720128	0
 
 / {
@@ -52,6 +53,20 @@
 		port {
 			hdmi_con_out: endpoint {
 				remote-endpoint = <&adv7535_out>;
+			};
+		};
+	};
+#endif
+
+#if HDMI_LT8912B
+	hdmi-out {
+		compatible = "hdmi-connector";
+		ddc-i2c-bus = <&i2c0>;
+		type = "a";
+
+		port {
+			hdmi_con_out: endpoint {
+				remote-endpoint = <&dsi_hdmi_bridge_out>;
 			};
 		};
 	};
@@ -337,6 +352,18 @@
 	};
 #endif
 
+#if HDMI_LT8912B
+	ports {
+		port@1 {
+			reg = <1>;
+			dsi0_out: endpoint {
+				data-lanes = <0 1 2 3>;
+				remote-endpoint = <&dsi_hdmi_bridge_in>;
+			};
+		};
+	};
+#endif
+
 #if HDMI_LT9611
 	ports {
 		port@1 {
@@ -493,6 +520,34 @@
 			port@1 {
 				reg = <1>;
 				adv7535_out: endpoint {
+					remote-endpoint = <&hdmi_con_out>;
+				};
+			};
+		};
+	};
+#endif
+
+#if HDMI_LT8912B
+	dsi_hdmi_bridge: dsihdmi@48 {
+		compatible = "lontium,lt8912b";
+		reg = <0x48>;
+		reset-gpios = <&pinctrl RZG2L_GPIO(43, 3) GPIO_ACTIVE_LOW>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				dsi_hdmi_bridge_in: endpoint@0 {
+					data-lanes = <0 1 2 3>;
+					remote-endpoint = <&dsi0_out>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				dsi_hdmi_bridge_out: endpoint@1 {
 					remote-endpoint = <&hdmi_con_out>;
 				};
 			};
