@@ -586,7 +586,6 @@
 &ohci0 {
 	dr_mode = "otg"; /* Dual-role (host/device) mode with OTG support */
 	status = "okay";
-
 	memory-region = <&global_cma>;
 };
 
@@ -774,19 +773,19 @@
 
 		mux {
 			pinmux = <RZG2L_PORT_PINMUX(28, 1, 1)>, /* ET0_LINKSTA */
-				 <RZG2L_PORT_PINMUX(27, 1, 1)>, /* ET0_MDC */
-				 <RZG2L_PORT_PINMUX(28, 0, 1)>, /* ET0_MDIO */
-				 <RZG2L_PORT_PINMUX(20, 1, 1)>, /* ET0_TX_CTL */
-				 <RZG2L_PORT_PINMUX(20, 2, 1)>, /* ET0_TXD0 */
-				 <RZG2L_PORT_PINMUX(21, 0, 1)>, /* ET0_TXD1 */
-				 <RZG2L_PORT_PINMUX(21, 1, 1)>, /* ET0_TXD2 */
-				 <RZG2L_PORT_PINMUX(22, 0, 1)>, /* ET0_TXD3 */
-				 <RZG2L_PORT_PINMUX(24, 0, 1)>, /* ET0_RXC */
-				 <RZG2L_PORT_PINMUX(24, 1, 1)>, /* ET0_RX_CTL */
-				 <RZG2L_PORT_PINMUX(25, 0, 1)>, /* ET0_RXD0 */
-				 <RZG2L_PORT_PINMUX(25, 1, 1)>, /* ET0_RXD1 */
-				 <RZG2L_PORT_PINMUX(26, 0, 1)>, /* ET0_RXD2 */
-				 <RZG2L_PORT_PINMUX(26, 1, 1)>; /* ET0_RXD3 */
+					 <RZG2L_PORT_PINMUX(27, 1, 1)>, /* ET0_MDC */
+					 <RZG2L_PORT_PINMUX(28, 0, 1)>, /* ET0_MDIO */
+					 <RZG2L_PORT_PINMUX(20, 1, 1)>, /* ET0_TX_CTL */
+					 <RZG2L_PORT_PINMUX(20, 2, 1)>, /* ET0_TXD0 */
+					 <RZG2L_PORT_PINMUX(21, 0, 1)>, /* ET0_TXD1 */
+					 <RZG2L_PORT_PINMUX(21, 1, 1)>, /* ET0_TXD2 */
+					 <RZG2L_PORT_PINMUX(22, 0, 1)>, /* ET0_TXD3 */
+					 <RZG2L_PORT_PINMUX(24, 0, 1)>, /* ET0_RXC */
+					 <RZG2L_PORT_PINMUX(24, 1, 1)>, /* ET0_RX_CTL */
+					 <RZG2L_PORT_PINMUX(25, 0, 1)>, /* ET0_RXD0 */
+					 <RZG2L_PORT_PINMUX(25, 1, 1)>, /* ET0_RXD1 */
+					 <RZG2L_PORT_PINMUX(26, 0, 1)>, /* ET0_RXD2 */
+					 <RZG2L_PORT_PINMUX(26, 1, 1)>; /* ET0_RXD3 */
 			power-source = <1800>;
 		};
 	};
@@ -910,16 +909,16 @@
 
 	spi0_pins: spi0 {
 		pinmux = <RZG2L_PORT_PINMUX(47,0,5)>, /* RSPI0_CK_C */
-			 <RZG2L_PORT_PINMUX(47,2,5)>, /* RSPI0_MISO_C */
-			 <RZG2L_PORT_PINMUX(47,1,5)>, /* RSPI0_MOSI_C */
-			 <RZG2L_PORT_PINMUX(47,3,5)>; /* RSPI0_SSL_C */
+				 <RZG2L_PORT_PINMUX(47,2,5)>, /* RSPI0_MISO_C */
+				 <RZG2L_PORT_PINMUX(47,1,5)>, /* RSPI0_MOSI_C */
+				 <RZG2L_PORT_PINMUX(47,3,5)>; /* RSPI0_SSL_C */
 	};
 
 	spi1_pins: spi1 {
 		pinmux = <RZG2L_PORT_PINMUX(44, 0, 1)>, /* CK */
-			 <RZG2L_PORT_PINMUX(44, 1, 1)>, /* MOSI */
-			 <RZG2L_PORT_PINMUX(44, 2, 1)>, /* MISO */
-			 <RZG2L_PORT_PINMUX(44, 3, 1)>; /* SSL */
+				 <RZG2L_PORT_PINMUX(44, 1, 1)>, /* MOSI */
+				 <RZG2L_PORT_PINMUX(44, 2, 1)>, /* MISO */
+				 <RZG2L_PORT_PINMUX(44, 3, 1)>; /* SSL */
 	};
 	
 	ssi0_pins: ssi0 {
@@ -932,13 +931,13 @@
 	/* USB0 pin configuration */
 	usb0_pins: usb0 {
 		pinmux = <RZG2L_PORT_PINMUX(4, 0, 1)>, /* VBUS */
-			 <RZG2L_PORT_PINMUX(5, 0, 1)>, /* OVC */
-			 <RZG2L_PORT_PINMUX(5, 1, 1)>; /* OTG_ID */
+				 <RZG2L_PORT_PINMUX(5, 0, 1)>, /* OVC */
+				 <RZG2L_PORT_PINMUX(5, 1, 1)>; /* OTG_ID */
 	};
 
 	/* USB1 pin configuration */
 	usb1_pins: usb1 {
 		pinmux = <RZG2L_PORT_PINMUX(42, 0, 1)>, /* VBUS */
-			 <RZG2L_PORT_PINMUX(42, 1, 1)>; /* OVC */
+				 <RZG2L_PORT_PINMUX(42, 1, 1)>; /* OVC */
 	};
 };
