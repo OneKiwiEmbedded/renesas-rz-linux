@@ -803,6 +803,7 @@ static void lt9611_bridge_detach(struct drm_bridge *bridge)
 	if (lt9611->dsi1 && !IS_ERR(lt9611->dsi1)) {
 		mipi_dsi_detach(lt9611->dsi1);
 		mipi_dsi_device_unregister(lt9611->dsi1);
+		lt9611->dsi1 = NULL;
 	}
 
 	//mipi_dsi_detach(lt9611->dsi0);
@@ -810,6 +811,7 @@ static void lt9611_bridge_detach(struct drm_bridge *bridge)
 	if (lt9611->dsi0 && !IS_ERR(lt9611->dsi0)) {
 		mipi_dsi_detach(lt9611->dsi0);
 		mipi_dsi_device_unregister(lt9611->dsi0);
+		lt9611->dsi1 = NULL;
 	}
 }
 
@@ -868,10 +870,13 @@ static int lt9611_bridge_attach(struct drm_bridge *bridge,
 
 err_unregister_dsi0:
 	lt9611_bridge_detach(bridge);
-	drm_connector_cleanup(&lt9611->connector);
+	//drm_connector_cleanup(&lt9611->connector);
+	if (lt9611->connector.dev)
+		drm_connector_cleanup(&lt9611->connector);
+
 	//mipi_dsi_device_unregister(lt9611->dsi0);
-	if (lt9611->dsi0 && !IS_ERR(lt9611->dsi0))
-		mipi_dsi_device_unregister(lt9611->dsi0);
+	//if (lt9611->dsi0 && !IS_ERR(lt9611->dsi0))
+		//mipi_dsi_device_unregister(lt9611->dsi0);
 
 	return ret;
 }

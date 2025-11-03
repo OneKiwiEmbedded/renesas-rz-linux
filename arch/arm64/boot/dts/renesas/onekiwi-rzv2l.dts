@@ -342,7 +342,7 @@
 		port@1 {
 			dsi_out: endpoint {
 				remote-endpoint = <&lt9611_in>;
-				data-lanes = <1 2 3 4>;
+				//data-lanes = <1 2 3 4>;
 			};
 		};
 	};
