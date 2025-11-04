@@ -13,9 +13,9 @@
 #include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
 
 #define HDMI_ADV7535	0
-#define HDMI_LT8912B	0
+#define HDMI_LT8912B	1
 #define HDMI_LT9611		0
-#define PANEL_PH720128	1
+#define PANEL_PH720128	0
 
 / {
 	model = "OneKiwi RZ/V2L";
@@ -61,8 +61,9 @@
 #if HDMI_LT8912B
 	hdmi-out {
 		compatible = "hdmi-connector";
+		type = "d";
 		ddc-i2c-bus = <&i2c0>;
-		type = "a";
+		hpd-gpios = <&pinctrl RZG2L_GPIO(43, 2) GPIO_ACTIVE_HIGH>;
 
 		port {
 			hdmi_con_out: endpoint {
@@ -532,7 +533,7 @@
 #endif
 
 #if HDMI_LT8912B
-	dsi_hdmi_bridge: dsihdmi@48 {
+	lt8912b: dsihdmi@48 {
 		compatible = "lontium,lt8912b";
 		reg = <0x48>;
 		reset-gpios = <&pinctrl RZG2L_GPIO(43, 3) GPIO_ACTIVE_LOW>;
