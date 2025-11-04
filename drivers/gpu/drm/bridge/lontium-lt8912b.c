@@ -578,8 +578,8 @@ static void lt8912_bridge_detach(struct drm_bridge *bridge)
 	if (lt->is_attached) {
 		lt8912_detach_dsi(lt);
 		lt8912_hard_power_off(lt);
-		drm_connector_unregister(&lt->connector);
-		drm_connector_cleanup(&lt->connector);
+		//drm_connector_unregister(&lt->connector);
+		//drm_connector_cleanup(&lt->connector);
 		if (lt->connector_inited) {
 			drm_connector_unregister(&lt->connector);
 			drm_connector_cleanup(&lt->connector);
@@ -739,7 +739,7 @@ static int lt8912_remove(struct i2c_client *client)
 {
 	struct lt8912 *lt = i2c_get_clientdata(client);
 
-	lt8912_bridge_detach(&lt->bridge);
+	//lt8912_bridge_detach(&lt->bridge);
 	drm_bridge_remove(&lt->bridge);
 	lt8912_free_i2c(lt);
 	lt8912_put_dt(lt);
