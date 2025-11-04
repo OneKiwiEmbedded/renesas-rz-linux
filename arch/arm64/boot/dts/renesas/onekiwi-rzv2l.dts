@@ -5,8 +5,9 @@
 #include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
 
 #define HDMI_ADV7535	0
-#define HDMI_LT9611		1
-#define DSI_PANEL		0
+#define HDMI_LT8912B	0
+#define HDMI_LT9611		0
+#define PANEL_PH720128	1
 
 / {
 	model = "OneKiwi RZ/V2L";
@@ -196,13 +197,28 @@
 	};
 
 #if HDMI_ADV7535
-    hdmi-out {
+	hdmi-out {
 		compatible = "hdmi-connector";
 		type = "d";
 
 		port {
 			hdmi_con_out: endpoint {
 				remote-endpoint = <&adv7535_out>;
+			};
+		};
+	};
+#endif
+
+#if HDMI_LT8912B
+	hdmi-out {
+		compatible = "hdmi-connector";
+		type = "d";
+		ddc-i2c-bus = <&i2c0>;
+		hpd-gpios = <&pinctrl RZG2L_GPIO(43, 2) GPIO_ACTIVE_HIGH>;
+
+		port {
+			hdmi_con_out: endpoint {
+				remote-endpoint = <&dsi_hdmi_bridge_out>;
 			};
 		};
 	};
@@ -310,24 +326,36 @@
 
 &dsi0 {
 	status = "okay";
-	#address-cells = <1>;
-	#size-cells = <0>;
+
 
 #if HDMI_ADV7535
 	ports {
 		port@1 {
-			dsi_out: endpoint {
-				remote-endpoint = <&adv7535_in>;
+			dsi0_out: endpoint {
 				data-lanes = <1 2 3 4>;
+				remote-endpoint = <&adv7535_in>;
 			};
 		};
 	};
 #endif
 
+#if HDMI_LT8912B
+	ports {
+		port@1 {
+			reg = <1>;
+			dsi0_out: endpoint {
+				data-lanes = <0 1 2 3>;
+				remote-endpoint = <&dsi_hdmi_bridge_in>;
+			};
+		};
+	};
+#endif
+
+
 #if HDMI_LT9611
 	ports {
 		port@1 {
-			dsi_out: endpoint {
+			dsi0_out: endpoint {
 				remote-endpoint = <&lt9611_in>;
 				data-lanes = <1 2 3 4>;
 			};
@@ -335,26 +363,13 @@
 	};
 #endif
 
-	/*
-	panel@0 {
-		status = "okay";
-		compatible = "avnet,ph720128t005","ilitek,ili9881c";
-		reset-gpios = <&pinctrl RZG2L_GPIO(22, 1) GPIO_ACTIVE_LOW>;
-		//te-gpios    = <&gpioX Z GPIO_ACTIVE_HIGH>;  // LCD_TE (tuỳ cần)
-		//backlight = <&bl>;
-		lcd-model = "ph720128t005";
-		dsi-lanes = <2>;
-		port {
-			panel_in: endpoint {
-				remote-endpoint = <&dsi0_out>;
-			};
-		};
-	};*/
+#if PANEL_PH720128
+	#address-cells = <1>;
+	#size-cells = <0>;
 
-#if DSI_PANEL
 	ports {
 		port@1 {
-			dsi_out: endpoint {
+			dsi0_out: endpoint {
 				remote-endpoint = <&panel_in>;
 				data-lanes = <1 2>;
 			};
@@ -371,7 +386,7 @@
 
 		port {
 			panel_in: endpoint {
-				remote-endpoint = <&dsi_out>;
+				remote-endpoint = <&dsi0_out>;
 			};
 		};
 	};
@@ -477,7 +492,7 @@
 			port@0 {
 				reg = <0>;
 				adv7535_in: endpoint@0 {
-					remote-endpoint = <&dsi_out>;
+					remote-endpoint = <&dsi0_out>;
 				};
 			};
 
@@ -490,6 +505,37 @@
 		};
 	};
 #endif
+
+#if HDMI_LT8912B
+	lt8912b: dsihdmi@48 {
+		compatible = "lontium,lt8912b";
+		reg = <0x48>;
+		status = "okay";
+		reset-gpios = <&pinctrl RZG2L_GPIO(43, 3) GPIO_ACTIVE_LOW>;
+		//hpd-gpios = <&pinctrl RZG2L_GPIO(43, 2) GPIO_ACTIVE_HIGH>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				dsi_hdmi_bridge_in: endpoint@0 {
+					data-lanes = <0 1 2 3>;
+					remote-endpoint = <&dsi0_out>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				dsi_hdmi_bridge_out: endpoint@1 {
+					remote-endpoint = <&hdmi_con_out>;
+				};
+			};
+		};
+	};
+#endif
+
 
 #if HDMI_LT9611
 	lt9611: hdmi-bridge@3b {
@@ -508,7 +554,7 @@
 			port@0 {
 				reg = <0>;
 				lt9611_in: endpoint {
-					remote-endpoint = <&dsi_out>;
+					remote-endpoint = <&dsi0_out>;
 				};
 			};
 			port@1 {
@@ -521,15 +567,15 @@
 	};
 #endif
 
-#if DSI_PANEL
+#if PANEL_PH720128
 	gt911: gt911_ts@14 {
 		compatible = "goodix,gt911";
 		reg = <0x14>;
 
 		interrupt-parent = <&pinctrl>;
 		interrupts = <RZG2L_GPIO(1, 1) IRQ_TYPE_EDGE_FALLING>;
-		irq-gpios = <&pinctrl RZG2L_GPIO(1, 1) GPIO_ACTIVE_HIGH>;   /* DSI_TS_nINT */
-		reset-gpios = <&pinctrl RZG2L_GPIO(43, 3) GPIO_ACTIVE_HIGH>; /* DSI_TS_RST */
+		irq-gpios = <&pinctrl RZG2L_GPIO(1, 1) GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&pinctrl RZG2L_GPIO(43, 3) GPIO_ACTIVE_HIGH>;
 		touchscreen-size-x = <720>;
 		touchscreen-size-y = <1280>;
 		status = "okay";
@@ -793,19 +839,19 @@
 
 		mux {
 			pinmux = <RZG2L_PORT_PINMUX(28, 1, 1)>, /* ET0_LINKSTA */
-				 <RZG2L_PORT_PINMUX(27, 1, 1)>, /* ET0_MDC */
-				 <RZG2L_PORT_PINMUX(28, 0, 1)>, /* ET0_MDIO */
-				 <RZG2L_PORT_PINMUX(20, 1, 1)>, /* ET0_TX_CTL */
-				 <RZG2L_PORT_PINMUX(20, 2, 1)>, /* ET0_TXD0 */
-				 <RZG2L_PORT_PINMUX(21, 0, 1)>, /* ET0_TXD1 */
-				 <RZG2L_PORT_PINMUX(21, 1, 1)>, /* ET0_TXD2 */
-				 <RZG2L_PORT_PINMUX(22, 0, 1)>, /* ET0_TXD3 */
-				 <RZG2L_PORT_PINMUX(24, 0, 1)>, /* ET0_RXC */
-				 <RZG2L_PORT_PINMUX(24, 1, 1)>, /* ET0_RX_CTL */
-				 <RZG2L_PORT_PINMUX(25, 0, 1)>, /* ET0_RXD0 */
-				 <RZG2L_PORT_PINMUX(25, 1, 1)>, /* ET0_RXD1 */
-				 <RZG2L_PORT_PINMUX(26, 0, 1)>, /* ET0_RXD2 */
-				 <RZG2L_PORT_PINMUX(26, 1, 1)>; /* ET0_RXD3 */
+					 <RZG2L_PORT_PINMUX(27, 1, 1)>, /* ET0_MDC */
+					 <RZG2L_PORT_PINMUX(28, 0, 1)>, /* ET0_MDIO */
+					 <RZG2L_PORT_PINMUX(20, 1, 1)>, /* ET0_TX_CTL */
+					 <RZG2L_PORT_PINMUX(20, 2, 1)>, /* ET0_TXD0 */
+					 <RZG2L_PORT_PINMUX(21, 0, 1)>, /* ET0_TXD1 */
+					 <RZG2L_PORT_PINMUX(21, 1, 1)>, /* ET0_TXD2 */
+					 <RZG2L_PORT_PINMUX(22, 0, 1)>, /* ET0_TXD3 */
+					 <RZG2L_PORT_PINMUX(24, 0, 1)>, /* ET0_RXC */
+					 <RZG2L_PORT_PINMUX(24, 1, 1)>, /* ET0_RX_CTL */
+					 <RZG2L_PORT_PINMUX(25, 0, 1)>, /* ET0_RXD0 */
+					 <RZG2L_PORT_PINMUX(25, 1, 1)>, /* ET0_RXD1 */
+					 <RZG2L_PORT_PINMUX(26, 0, 1)>, /* ET0_RXD2 */
+					 <RZG2L_PORT_PINMUX(26, 1, 1)>; /* ET0_RXD3 */
 			power-source = <1800>;
 		};
 	};
