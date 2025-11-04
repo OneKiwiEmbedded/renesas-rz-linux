@@ -13,9 +13,9 @@
 #include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
 
 #define HDMI_ADV7535	0
-#define HDMI_LT8912B	1
+#define HDMI_LT8912B	0
 #define HDMI_LT9611		0
-#define PANEL_PH720128	0
+#define PANEL_PH720128	1
 
 / {
 	model = "OneKiwi RZ/V2L";
@@ -409,6 +409,10 @@
 &du {
 	status = "okay";
 #if HDMI_ADV7535
+	dsi-lanes = <4>;
+#endif
+
+#if HDMI_LT8912B
 	dsi-lanes = <4>;
 #endif
 
