@@ -45,6 +45,7 @@ struct lt8912 {
 	u8 data_lanes;
 	bool is_power_on;
 	bool is_attached;
+	bool connector_inited;
 };
 
 static int lt8912_write_init_config(struct lt8912 *lt)
@@ -529,6 +530,7 @@ static int lt8912_bridge_connector_init(struct drm_bridge *bridge)
 
 	connector->dpms = DRM_MODE_DPMS_OFF;
 	drm_connector_attach_encoder(connector, bridge->encoder);
+	lt->connector_inited = true;
 
 exit:
 	return ret;
@@ -578,6 +580,12 @@ static void lt8912_bridge_detach(struct drm_bridge *bridge)
 		lt8912_hard_power_off(lt);
 		drm_connector_unregister(&lt->connector);
 		drm_connector_cleanup(&lt->connector);
+		if (lt->connector_inited) {
+			drm_connector_unregister(&lt->connector);
+			drm_connector_cleanup(&lt->connector);
+			lt->connector_inited = false;
+		}
+		lt->is_attached = false;
 	}
 }
 
