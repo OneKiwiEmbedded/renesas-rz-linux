@@ -363,7 +363,10 @@ static int lt8912_soft_power_on(struct lt8912 *lt)
 			return ret;
 		}
 
-		ret = regmap_write(lt->regmap[I2C_CEC_DSI], 0x13, lanes & 3);
+		//ret = regmap_write(lt->regmap[I2C_CEC_DSI], 0x13, lanes & 3);
+		if (lanes < 1 || lanes > 4)
+			lanes = 4;
+		ret = regmap_write(lt->regmap[I2C_CEC_DSI], 0x13, (lanes - 1) & 0x3);
 		if(ret < 0) {
 			return ret;
 		}

@@ -214,7 +214,7 @@
 		compatible = "hdmi-connector";
 		type = "d";
 		ddc-i2c-bus = <&i2c0>;
-		hpd-gpios = <&pinctrl RZG2L_GPIO(43, 2) GPIO_ACTIVE_HIGH>;
+		//hpd-gpios = <&pinctrl RZG2L_GPIO(43, 2) GPIO_ACTIVE_HIGH>;
 
 		port {
 			hdmi_con_out: endpoint {
