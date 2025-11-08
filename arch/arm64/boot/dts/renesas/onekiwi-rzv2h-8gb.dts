@@ -315,8 +315,8 @@
 		pinctrl-names = "default";
 		//pinctrl-0 = <&i2c4_pins>;
 
-		sda-gpios = <&pinctrl RZG2L_GPIO(7, 0) GPIO_ACTIVE_HIGH>;
-		scl-gpios = <&pinctrl RZG2L_GPIO(7, 1) GPIO_ACTIVE_HIGH>;
+		sda-gpios = <&pinctrl RZG2L_GPIO(7, 0) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&pinctrl RZG2L_GPIO(7, 1) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 
 		i2c-gpio,delay-us = <2>;
 		i2c-gpio,timeout-ms = <500>;
@@ -331,8 +331,8 @@
 		pinctrl-names = "default";
 		//pinctrl-0 = <&i2c5_pins>;
 
-		sda-gpios = <&pinctrl RZG2L_GPIO(7, 2) GPIO_ACTIVE_HIGH>;
-		scl-gpios = <&pinctrl RZG2L_GPIO(7, 3) GPIO_ACTIVE_HIGH>;
+		sda-gpios = <&pinctrl RZG2L_GPIO(7, 2) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&pinctrl RZG2L_GPIO(7, 3) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 
 		i2c-gpio,delay-us = <2>;
 		i2c-gpio,timeout-ms = <500>;
@@ -347,8 +347,8 @@
 		pinctrl-names = "default";
 		//pinctrl-0 = <&i2c6_pins>;
 
-		sda-gpios = <&pinctrl RZG2L_GPIO(7, 4) GPIO_ACTIVE_HIGH>;
-		scl-gpios = <&pinctrl RZG2L_GPIO(7, 5) GPIO_ACTIVE_HIGH>;
+		sda-gpios = <&pinctrl RZG2L_GPIO(7, 4) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&pinctrl RZG2L_GPIO(7, 5) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 
 		i2c-gpio,delay-us = <2>;
 		i2c-gpio,timeout-ms = <500>;
@@ -363,8 +363,8 @@
 		pinctrl-names = "default";
 		//pinctrl-0 = <&i2c7_pins>;
 
-		sda-gpios = <&pinctrl RZG2L_GPIO(7, 6) GPIO_ACTIVE_HIGH>;
-		scl-gpios = <&pinctrl RZG2L_GPIO(7, 7) GPIO_ACTIVE_HIGH>;
+		sda-gpios = <&pinctrl RZG2L_GPIO(7, 6) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&pinctrl RZG2L_GPIO(7, 7) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 
 		i2c-gpio,delay-us = <2>;
 		i2c-gpio,timeout-ms = <500>;
@@ -379,8 +379,8 @@
 		pinctrl-names = "default";
 		//pinctrl-0 = <&i2c9_pins>;
 
-		sda-gpios = <&pinctrl RZG2L_GPIO(8, 2) GPIO_ACTIVE_HIGH>;
-		scl-gpios = <&pinctrl RZG2L_GPIO(8, 3) GPIO_ACTIVE_HIGH>;
+		sda-gpios = <&pinctrl RZG2L_GPIO(8, 2) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&pinctrl RZG2L_GPIO(8, 3) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 
 		i2c-gpio,delay-us = <2>;
 		i2c-gpio,timeout-ms = <500>;
