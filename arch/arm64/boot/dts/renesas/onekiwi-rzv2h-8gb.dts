@@ -329,7 +329,7 @@
 	i2c5_hdmi: i2c-gpio-5 {
 		compatible = "i2c-gpio";
 		pinctrl-names = "default";
-		pinctrl-0 = <&gpio_pins>;
+		//pinctrl-0 = <&gpio_pins>;
 
 		sda-gpios = <&pinctrl RZG2L_GPIO(7, 2) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 		scl-gpios = <&pinctrl RZG2L_GPIO(7, 3) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
@@ -1035,8 +1035,8 @@
 		pinmux = <RZG2L_PORT_PINMUX(7,2,0)>, /* P7_2 */
 				 <RZG2L_PORT_PINMUX(7,3,0)>; /* P7_3 */
 		bias-disable;
-		input-enable;
-		/* drive-open-drain;  // chỉ nếu driver hỗ trợ */
+		//input-enable;
+		//drive-open-drain;
 	};
 
 	scif0_pins: scif0 {
