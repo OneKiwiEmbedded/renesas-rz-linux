@@ -12,8 +12,8 @@
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
 
-#define HDMI_ADV7535	0
-#define HDMI_LT8912B	1
+#define HDMI_ADV7535	1
+#define HDMI_LT8912B	0
 #define HDMI_LT9611		0
 #define PANEL_PH720128	0
 
