@@ -4,9 +4,9 @@
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
 
-#define HDMI_ADV7535	1
+#define HDMI_ADV7535	0
 #define HDMI_LT8912B	0
-#define HDMI_LT9611		0
+#define HDMI_LT9611		1
 #define PANEL_PH720128	0
 
 / {
@@ -357,7 +357,7 @@
 		port@1 {
 			dsi0_out: endpoint {
 				remote-endpoint = <&lt9611_in>;
-				data-lanes = <1 2 3 4>;
+				data-lanes = <0 1 2 3>;
 			};
 		};
 	};
@@ -554,6 +554,7 @@
 			port@0 {
 				reg = <0>;
 				lt9611_in: endpoint {
+					data-lanes = <0 1 2 3>;
 					remote-endpoint = <&dsi0_out>;
 				};
 			};
