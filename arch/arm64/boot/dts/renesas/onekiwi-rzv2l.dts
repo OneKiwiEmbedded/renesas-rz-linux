@@ -750,6 +750,15 @@
 /* microSD */
 &sdhi1 {
 	pinctrl-0 = <&sdhi1_pins>;
+	pinctrl-names = "default";
+	vmmc-supply = <&reg_3p3v>;
+	bus-width = <4>;
+	status = "okay";
+};
+
+/*
+&sdhi1 {
+	pinctrl-0 = <&sdhi1_pins>;
 	pinctrl-1 = <&sdhi1_pins_uhs>;
 	pinctrl-names = "default", "state_uhs";
 
@@ -759,7 +768,7 @@
 	sd-uhs-sdr50;
 	sd-uhs-sdr104;
 	status = "okay";
-};
+};*/
 
 &spi0 {
 	pinctrl-0 = <&spi0_pins>;
