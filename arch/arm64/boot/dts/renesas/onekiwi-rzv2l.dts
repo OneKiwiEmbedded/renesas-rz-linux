@@ -315,6 +315,20 @@
 	clock-frequency = <12288000>;
 };
 
+&canfd {
+	pinctrl-0 = <&can0_pins &can1_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	channel0 {
+		status = "okay";
+	};
+
+	channel1 {
+		status = "okay";
+	};
+};
+
 &csi2 {
 	status = "okay";
 
