@@ -1,14 +1,16 @@
-// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 /*
  * Device Tree Source for the OneKiw RZ/V2H SOM board
- *
- * Copyright (C) 2024 Renesas Electronics Corp.
+ * Copyright (C) 2025 OneKiwi Technology Co., Ltd
  */
 
 /dts-v1/;
 #include "onekiwi-r9a09g057.dtsi"
-#include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
+
+#define CODEC_SGTLT5000		1
+#define SINGLE_SENSOR
 
 / {
 	model = "OneKiwi RZ/V2H 16GB";
@@ -16,6 +18,13 @@
 
 	aliases {
 		serial0 = &scif0;
+		serial1 = &sci0;
+		serial2 = &sci2;
+		serial3 = &sci3;
+		i2c1 = &i2c1;
+		i2c8 = &i2c8;
+		i2c9 = &i2c5_hdmi;
+		i2c10 = &i2c7_soft;
 		mmc0 = &sdhi0;
 		mmc1 = &sdhi1;
 		mmc2 = &sdhi2;
@@ -106,6 +115,15 @@
 		compatible = "renesas,vspm_if";
 	};
 
+	udmabuf@0 {
+		compatible = "ikwzm,u-dma-buf";
+		device-name = "udmabuf0";
+		minor-number = <0>;
+		size = <0x4000000>; // 64MiB
+		dma-coherent;
+		memory-region = <&image_buf0>;
+	};
+
 	reg_1p8v: regulator0 {
 		compatible = "regulator-fixed";
 		regulator-name = "fixed-1.8V";
@@ -143,6 +161,42 @@
 		states = <3300000 0 1800000 1>;
 	};
 
+	clk_32k: osc32k {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <32768>;
+	};
+
+	clk_ext_camera: clk_ext_camera {
+ 		compatible = "fixed-clock";
+ 		#clock-cells = <0>;
+		clock-frequency = <74250000>;
+ 	};
+ 
+	imx415_ovdd_1v8: 1p8v {
+ 		compatible = "regulator-fixed";
+		regulator-name = "camera_ovdd";
+ 		regulator-min-microvolt = <1800000>;
+ 		regulator-max-microvolt = <1800000>;
+ 		regulator-always-on;
+ 	};
+ 
+	imx415_avdd_2v9: 2p9v {
+ 		compatible = "regulator-fixed";
+		regulator-name = "camera_avdd";
+		regulator-min-microvolt = <2900000>;
+		regulator-max-microvolt = <2900000>;
+ 		regulator-always-on;
+ 	};
+ 
+	imx415_dvdd_1v1: 1p1v {
+ 		compatible = "regulator-fixed";
+		regulator-name = "camera_dvdd";
+		regulator-min-microvolt = <1100000>;
+		regulator-max-microvolt = <1100000>;
+ 		regulator-always-on;
+ 	};
+
 	x1_clk: x1-clock {
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
@@ -161,7 +215,27 @@
 		compatible = "simple-audio-card";
 		simple-audio-card,name = "rsnd_rzv2h";
 		status="okay";
-
+#if CODEC_SGTLT5000
+		simple-audio-card,widgets =
+			"Headphone", "Headphone Jack",
+			"Microphone", "Mic Jack",
+			"Line", "Line In",
+			"Line", "Line Out";
+		simple-audio-card,routing =
+			"Headphone Jack", "HP_OUT",
+			"LINE_OUT", "Line Out",
+			"Mic Jack", "MIC_IN",
+			"Line In", "LINE_IN";
+#else
+		simple-audio-card,widgets =
+			"Headphone", "Headphone Jack",
+			"Microphone", "Mic Jack";
+		simple-audio-card,routing =
+			"Headphone Jack",	"LOUT1",
+			"Headphone Jack",	"ROUT1",
+			"LINPUT1", "Mic Jack",
+			"RINPUT1", "Mic Jack";
+#endif
 		ssi_link: simple-audio-card,dai-link@0 {
 			format = "i2s";
 			reg = <0>;
@@ -174,7 +248,13 @@
 			};
 
 			codec {
+#if CODEC_SGTLT5000
 				sound-dai = <&sgtl5000>;
+				system-clock-frequency = <11289600>;
+#else
+				sound-dai = <&es8388>;
+				system-clock-frequency = <11289600>;
+#endif
 				clocks = <&rcar_sound>;
 			};
 		};
@@ -191,14 +271,129 @@
 		};
 	};
 
-	udmabuf@0 {
-		compatible = "ikwzm,u-dma-buf";
-		device-name = "udmabuf0";
-		minor-number = <0>;
-		size = <0x4000000>; // 64MiB
-		dma-coherent;
-		memory-region = <&image_buf0>;
+	gpio-keys {
+		compatible = "gpio-keys";
+		pinctrl-names = "default";
+
+		user {
+			interrupt-parent = <&pinctrl>;
+			interrupts = <RZG2L_GPIO(10, 7) IRQ_TYPE_LEVEL_LOW>;
+			linux,code = <KEY_1>;
+			label = "user";
+			debounce-interval = <10>;
+			wakeup-source;
+		};
 	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		led1 {
+			gpios = <&pinctrl RZG2L_GPIO(10, 1) GPIO_ACTIVE_LOW>;
+			label = "led1";
+			default-state = "on";
+			linux,default-trigger = "heartbeat";
+		};
+
+		led2 {
+			gpios = <&pinctrl RZG2L_GPIO(10, 6) GPIO_ACTIVE_LOW>;
+			label = "led2";
+			default-state = "on";
+			linux,default-trigger = "heartbeat";
+		};
+	};
+
+	pwrseq_wifi: pwrseq_wifi {
+		compatible = "mmc-pwrseq-simple";
+		reset-gpios = <&pinctrl RZG2L_GPIO(0, 4) GPIO_ACTIVE_HIGH>;
+		post-power-on-delay-ms = <200>;
+		clocks = <&clk_32k>;
+		clock-names = "ext_clock";
+	};
+
+	i2c4_csi3: i2c-gpio-4 {
+		compatible = "i2c-gpio";
+		pinctrl-names = "default";
+		//pinctrl-0 = <&i2c4_pins>;
+
+		sda-gpios = <&pinctrl RZG2L_GPIO(7, 0) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&pinctrl RZG2L_GPIO(7, 1) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+
+		i2c-gpio,delay-us = <2>;
+		i2c-gpio,timeout-ms = <500>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "okay";
+	};
+
+	i2c5_hdmi: i2c-gpio-5 {
+		compatible = "i2c-gpio";
+		pinctrl-names = "default";
+		//pinctrl-0 = <&gpio_pins>;
+
+		sda-gpios = <&pinctrl RZG2L_GPIO(7, 2) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&pinctrl RZG2L_GPIO(7, 3) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+
+		i2c-gpio,delay-us = <2>;
+		i2c-gpio,timeout-ms = <500>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "okay";
+	};
+
+	i2c6_csi0: i2c-gpio-6 {
+		compatible = "i2c-gpio";
+		pinctrl-names = "default";
+		//pinctrl-0 = <&i2c6_pins>;
+
+		sda-gpios = <&pinctrl RZG2L_GPIO(7, 4) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&pinctrl RZG2L_GPIO(7, 5) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+
+		i2c-gpio,delay-us = <2>;
+		i2c-gpio,timeout-ms = <500>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "okay";
+	};
+
+	i2c7_soft: i2c-gpio-7 {
+		compatible = "i2c-gpio";
+		pinctrl-names = "default";
+		//pinctrl-0 = <&i2c7_pins>;
+
+		sda-gpios = <&pinctrl RZG2L_GPIO(7, 6) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&pinctrl RZG2L_GPIO(7, 7) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+
+		i2c-gpio,delay-us = <2>;
+		i2c-gpio,timeout-ms = <500>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "okay";
+	};
+
+	i2c9_csi2: i2c-gpio-9 {
+		compatible = "i2c-gpio";
+		pinctrl-names = "default";
+		//pinctrl-0 = <&i2c9_pins>;
+
+		sda-gpios = <&pinctrl RZG2L_GPIO(8, 2) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&pinctrl RZG2L_GPIO(8, 3) (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+
+		i2c-gpio,delay-us = <2>;
+		i2c-gpio,timeout-ms = <500>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "okay";
+	};
+};
+
+&adc {
+	status = "okay";
 };
 
 &audio_clka {
@@ -213,15 +408,25 @@
 	clock-frequency = <22579200>;
 };
 
-&extal_clk {
-	clock-frequency = <24000000>;
+&canfd {
+	pinctrl-0 = <&can2_pins &can3_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	channel2 {
+		status = "okay";
+	};
+
+	channel3 {
+		status = "okay";
+	};
 };
 
-&ostm2 {
+&cmtw0 {
 	status = "okay";
 };
 
-&ostm3 {
+&cmtw1 {
 	status = "okay";
 };
 
@@ -229,15 +434,7 @@
 	status = "okay";
 };
 
-&csi20 {
-	status = "okay";
-};
-
 &cru1 {
-	status = "okay";
-};
-
-&csi21 {
 	status = "okay";
 };
 
@@ -245,11 +442,29 @@
 	status = "okay";
 };
 
-&csi22 {
+&cru3 {
 	status = "okay";
 };
 
-&cru3 {
+&csi20 {
+	status = "okay";
+};
+
+&csi21 {
+ 	status = "okay";
+ 
+ 	ports {
+ 		port {
+			csi21_in: endpoint {
+ 				clock-lanes = <0>;
+				data-lanes = <1 2 3 4>;
+				remote-endpoint = <&imx415b_to_csi21>;
+ 			};
+ 		};
+	};
+};
+
+&csi22 {
 	status = "okay";
 };
 
@@ -257,7 +472,9 @@
 	status = "okay";
 };
 
-&du {
+&drpai0 {
+	memory-region = <&drp_reserved>;
+	image-memory-region = <&image_buf0>;
 	status = "okay";
 };
 
@@ -271,6 +488,27 @@
 			};
 		};
 	};
+};
+
+&drp1 {
+    memory-region = <&codec0>;
+    memory-oca-region = <&opencva0>;
+    status = "okay";
+};
+
+&du {
+	status = "okay";
+};
+
+&ehci0 {
+	memory-region = <&global_cma>;
+	dr_mode = "otg";
+	status = "okay";
+};
+
+&ehci1 {
+	memory-region = <&global_cma>;
+	status = "okay";
 };
 
 &eth0 {
@@ -329,30 +567,56 @@
 	};
 };
 
+&extal_clk {
+	clock-frequency = <24000000>;
+};
+
+&hsusb {
+	dr_mode = "otg";
+	status = "okay";
+};
+
+&input_video_control {
+	status = "okay";
+	crus = <&cru1>;
+};
+
+&iq {
+	status = "okay";
+};
+
 &i2c1 {
 	pinctrl-0 = <&i2c1_pins>;
 	pinctrl-names = "default";
 	status = "okay";
 
-	sgtl5000: audio-codec@a {
-		compatible = "fsl,sgtl5000";
-		#sound-dai-cells = <0>;
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg = <0xa>;
+	imx415b: imx415@1a {
+		compatible = "sony,imx415";
+		reg = <0x1a>;
+		//slave-mode;
+		clock-names = "inck";
+		clocks = <&clk_ext_camera>;
+		ovdd-supply = <&imx415_ovdd_1v8>;
+		avdd-supply = <&imx415_avdd_2v9>;
+		dvdd-supply = <&imx415_dvdd_1v1>;
+ 		reset-gpios = <&pinctrl RZG2L_GPIO(3, 1) GPIO_ACTIVE_LOW>;
 
-		clocks = <&rcar_sound>;
-		clock-names = "mclk";
-
-		VDDA-supply = <&reg_3p3v>;
-		VDDIO-supply = <&reg_1p8v>;
-		VDDD-supply = <&reg_1p8v>;
-	};
+ 		port {
+			imx415b_to_csi21: endpoint {
+ 				clock-lanes = <0>;
+				data-lanes = <1 2 3 4>;
+				link-frequencies = /bits/ 64 <445500000 445500000 445500000 445500000>;
+ 				remote-endpoint = <&csi21_in>;
+ 			};
+ 		};
+ 	};
 };
 
-&i2c8 {
-	pinctrl-0 = <&i2c8_pins>;
-	pinctrl-names = "default";
+&i2c4_csi3 {
+	status = "okay";
+};
+
+&i2c5_hdmi {
 	status = "okay";
 
 	adv7535: hdmi@3d {
@@ -367,7 +631,7 @@
 		v1p2-supply = <&reg_1p8v>;
 
 		interrupt-parent = <&pinctrl>;
-		interrupts = <RZG2L_GPIO(0, 1) IRQ_TYPE_LEVEL_LOW>;
+		interrupts = <RZG2L_GPIO(10, 4) IRQ_TYPE_LEVEL_LOW>;
 
 		adi,dsi-lanes = <4>;
 
@@ -392,10 +656,174 @@
 	};
 };
 
+&i2c6_csi0 {
+	status = "okay";
+};
+
+&i2c7_soft {
+	status = "okay";
+};
+
+&i2c8 {
+	pinctrl-0 = <&i2c8_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+	
+#if CODEC_SGTLT5000
+	sgtl5000: audio-codec@a {
+		compatible = "fsl,sgtl5000";
+		#sound-dai-cells = <0>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0xa>;
+
+		//clocks = <&rcar_sound>;
+		clocks = <&clk_ext_audio>;
+		clock-names = "mclk";
+
+		VDDA-supply = <&reg_3p3v>;
+		VDDIO-supply = <&reg_1p8v>;
+		VDDD-supply = <&reg_1p8v>;
+	};
+#else
+	es8388: audio-codec@11 {
+		compatible = "everest,es8388";
+		#sound-dai-cells = <0>;
+		reg = <0x11>;
+
+		AVDD-supply  = <&reg_1p8v>;
+		DVDD-supply  = <&reg_1p8v>;
+		PVDD-supply  = <&reg_1p8v>;
+		HPVDD-supply = <&reg_3p3v>;
+
+		clocks = <&clk_ext_audio>;
+		//clock-names = "mclk";
+		status = "okay";
+	};
+#endif
+};
+
+&i2c9_csi2 {
+	status = "okay";
+};
+
+&lens {
+	status = "okay";
+};
+
+&ohci0 {
+	memory-region = <&global_cma>;
+	dr_mode = "otg";
+	status = "okay";
+};
+
+&ohci1 {
+	memory-region = <&global_cma>;
+	status = "okay";
+};
+
+&ostm2 {
+	status = "okay";
+};
+
+&ostm3 {
+	status = "okay";
+};
+
+&pcie0 {
+	// Map all possible DDR as inbound ranges
+	dma-ranges = <0x42000000 0 0x40000000 0 0x40000000 0x4 0x00000000>;
+	status = "okay";
+};
+
+&rcar_sound {
+	pinctrl-0 = <&sound_clk_pins &sound_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	/* audio_clkout */
+	#clock-cells = <0>;
+	clock-frequency = <11289600>;
+
+	/* Multi DAI */
+	#sound-dai-cells = <1>;
+
+	rcar_sound,dai {
+		dai0 {
+			playback = <&ssi1>;
+			capture  = <&ssi2 &src0 &dvc0>;
+		};
+	};
+};
+
+&rtc {
+	status = "okay";
+};
+
 /* console */
 &scif0 {
 	pinctrl-0 = <&scif0_pins>;
 	pinctrl-names = "default";
+	status = "okay";
+};
+
+&sci0 {
+	pinctrl-0 = <&sci0_pins>;
+	pinctrl-names = "default";
+	uart-has-rtscts;
+	status = "okay";
+};
+
+/*
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_xfer &uart0_cts &uart0_rts>;
+	status = "okay";
+
+	bluetooth {
+		compatible = "brcm,bcm43438-bt";
+		clocks = <&rk808 1>;
+		clock-names = "lpo";
+		device-wakeup-gpios = <&gpio2 RK_PD2 GPIO_ACTIVE_HIGH>;
+		host-wakeup-gpios = <&gpio0 RK_PA4 GPIO_ACTIVE_HIGH>;
+		shutdown-gpios = <&gpio0 RK_PB1 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&bt_host_wake_l &bt_wake_l &bt_reg_on_h>;
+		vbat-supply = <&vcc3v3_sys>;
+		vddio-supply = <&vcc_1v8>;
+	
+*/
+&sci2 {
+	pinctrl-0 = <&sci2_pins>;
+	pinctrl-names = "default";
+	uart-has-rtscts;
+	status = "okay";
+
+	bluetooth@0 {
+		compatible = "brcm,bcm43430a1-bt";	/* AP6212 */
+        //compatible = "brcm,bcm43438-bt";	/* AP6212A */
+		current-speed = <115200>;
+		max-speed = <3000000>;
+		/* BT_REG_ON / BT_WAKE / BT_HOST_WAKE của module */
+		//reset-gpios = <&pinctrl RZG2L_GPIO(0, 1) GPIO_ACTIVE_HIGH>;  /* BT_RST_N */
+		shutdown-gpios = <&pinctrl RZG2L_GPIO(0, 1) GPIO_ACTIVE_HIGH>; /* BT_RST */
+		//device-wakeup-gpios  = <&pinctrl RZG2L_GPIO(<PORT>, <PIN>) GPIO_ACTIVE_HIGH>;
+		//host-wakeup-gpios    = <&pinctrl RZG2L_GPIO(<PORT>, <PIN>) GPIO_ACTIVE_HIGH>;
+		clocks = <&clk_32k>;
+		clock-names = "lpo";
+		vbat-supply = <&reg_3p3v>;
+		vddio-supply = <&reg_1p8v>;
+	};
+};
+
+&sci3 {
+	pinctrl-0 = <&sci3_pins>;
+	pinctrl-names = "default";
+	uart-has-rtscts;
+	status = "okay";
+};
+
+&sensor {
 	status = "okay";
 };
 
@@ -415,12 +843,92 @@
 	pinctrl-0 = <&sdhi1_pins>;
 	pinctrl-names = "default";
 	vmmc-supply = <&vmmc_sdhi1>;
-	vqmmc-supply = <&vccq_sdhi1>;
-	//vqmmc-supply = <&reg_1p8v>;
+	//vqmmc-supply = <&vccq_sdhi1>;
+	vqmmc-supply = <&reg_1p8v>;
 	bus-width = <4>;
 	sd-uhs-sdr50;
 	sd-uhs-sdr104;
 	status = "okay";
+};
+
+/*
+&sdio0 {
+	bus-width = <4>;
+	cap-sd-highspeed;
+	cap-sdio-irq;
+	clock-frequency = <50000000>;
+	disable-wp;
+	keep-power-in-suspend;
+	max-frequency = <50000000>;
+	mmc-pwrseq = <&sdio_pwrseq>;
+	non-removable;
+	pinctrl-names = "default";
+	pinctrl-0 = <&sdio0_bus4 &sdio0_cmd &sdio0_clk>;
+	sd-uhs-sdr104;
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	brcmf: wifi@1 {
+		reg = <1>;
+		compatible = "brcm,bcm4329-fmac";
+		interrupt-parent = <&gpio0>;
+		interrupts = <RK_PA3 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "host-wake";
+		pinctrl-names = "default";
+		pinctrl-0 = <&wifi_host_wake_l>;
+	};
+};
+*/
+&sdhi2 {
+	pinctrl-0 = <&sdhi2_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+	bus-width = <4>;
+	disable-wp;
+	no-mmc;
+	no-sd;
+	non-removable;                /* module hàn cố định */
+	keep-power-in-suspend;        /* giữ nguồn khi suspend */
+	cap-sdio-irq;                 /* cho phép SDIO IRQ (host-wake) */
+	wakeup-source;                /* cho phép đánh thức hệ thống */
+	sd-uhs-sdr104;
+
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	vmmc-supply  = <&reg_1p8v>;
+	vqmmc-supply = <&reg_1p8v>;
+	mmc-pwrseq   = <&pwrseq_wifi>;
+
+	brcmf: wifi@1 {
+		reg = <1>;
+		compatible = "brcm,bcm43430-fmac", "brcm,bcm4329-fmac";
+		//compatible = "brcm,bcm4329-fmac";   /* dùng chung cho họ BCM4343x/CYW433xx */
+		//interrupt-parent = <&pinctrl>;
+		/* WL_HOST_WAKE → GPIO host, mức active tuỳ thiết kế (thường HIGH) */
+		interrupts = <&pinctrl RZG2L_GPIO(0, 3) IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "host-wake";
+		wakeup-source;
+	};
+};
+
+&spi1 {
+	pinctrl-0 = <&spi1_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	spidev@0{
+		#address-cellss=<1>;
+		#size-cells=<1>;
+		compatible = "rohm,dh2228fv";
+		spi-max-frequency = <80000000>;
+		reg = <0>;
+	};
+};
+
+&ssi2 {
+	shared-pin;
 };
 
 &usb20phyrst {
@@ -428,47 +936,6 @@
 };
 
 &usb21phyrst {
-	status = "okay";
-};
-
-&xhci0 {
-	pinctrl-0 = <&usb30_pins>;
-	pinctrl-names = "default";
-	memory-region = <&global_cma>;
-	status = "okay";
-};
-
-&xhci1 {
-	pinctrl-0 = <&usb31_pins>;
-	pinctrl-names = "default";
-	memory-region = <&global_cma>;
-	status = "okay";
-};
-
-&ohci0 {
-	memory-region = <&global_cma>;
-	dr_mode = "otg";
-	status = "okay";
-};
-
-&ohci1 {
-	memory-region = <&global_cma>;
-	status = "okay";
-};
-
-&ehci0 {
-	memory-region = <&global_cma>;
-	dr_mode = "otg";
-	status = "okay";
-};
-
-&ehci1 {
-	memory-region = <&global_cma>;
-	status = "okay";
-};
-
-&hsusb {
-	dr_mode = "otg";
 	status = "okay";
 };
 
@@ -484,11 +951,21 @@
 	status = "okay";
 };
 
-&rtc {
+&wdt1 {
 	status = "okay";
 };
 
-&wdt1 {
+&xhci0 {
+	pinctrl-0 = <&usb30_pins>;
+	pinctrl-names = "default";
+	memory-region = <&global_cma>;
+	status = "okay";
+};
+
+&xhci1 {
+	pinctrl-0 = <&usb31_pins>;
+	pinctrl-names = "default";
+	memory-region = <&global_cma>;
 	status = "okay";
 };
 
@@ -534,86 +1011,15 @@
 	};
 };
 
-/*
-&pcie0 {
-	/ Map all possible DDR as inbound ranges
-	dma-ranges = <0x42000000 0 0x40000000 0 0x40000000 0x4 0x00000000>;
-	status = "okay";
-};*/
-
-&pcie0 {
-	// Map all possible DDR as inbound ranges
-	dma-ranges = <0x42000000 0 0x40000000 0 0x40000000 0x2 0x00000000>;
-	status = "okay";
-};
-
-&adc {
-	status = "okay";
-};
-
-&cmtw0 {
-	status = "okay";
-};
-
-&cmtw1 {
-	status = "okay";
-};
-
-&drpai0 {
-	memory-region = <&drp_reserved>;
-	image-memory-region = <&image_buf0>;
-	status = "okay";
-};
-
-&spi1 {
-	pinctrl-0 = <&spi1_pins>;
-	pinctrl-names = "default";
-	status = "okay";
-
-	tpm@0 {
-		compatible = "infineon,slb9670";
-		reg = <0>;                            // SPI chip-select 0
-		spi-max-frequency = <500000>;        // Infineon khuyến nghị ≤ 1MHz
-		//interrupt-parent = <&pinctrl>;
-		interrupts = <&pinctrl RZG2L_GPIO(9, 6) IRQ_TYPE_LEVEL_HIGH>; // IRQ của TPM, bạn cần thay đổi số GPIO tương ứng
-		reset-gpios = <&pinctrl RZG2L_GPIO(9, 5) GPIO_ACTIVE_LOW>; // GPIO reset cho TPM, thay đổi tùy thuộc vào mạch của bạn
-		tpm,operating-mode = <1>;
-	};
-};
-
-&rcar_sound {
-	pinctrl-0 = <&sound_clk_pins &sound_pins>;
-	pinctrl-names = "default";
-	status = "okay";
-
-	/* audio_clkout */
-	#clock-cells = <0>;
-	clock-frequency = <11289600>;
-
-	/* Multi DAI */
-	#sound-dai-cells = <1>;
-
-	rcar_sound,dai {
-		dai0 {
-			playback = <&ssi1>;
-			capture  = <&ssi2 &src0 &dvc0>;
-		};
-	};
-};
-
-&ssi2 {
-	shared-pin;
-};
-
 &pinctrl {
-	scif0_pins: scif0 {
-		pins =  "SCIF_RXD", "SCIF_TXD";
+	can2_pins: can2 {
+		pinmux = <RZG2L_PORT_PINMUX(8,5,5)>, /* CAN2_RX */
+				 <RZG2L_PORT_PINMUX(8,4,5)>; /* CAN2_TX */
 	};
 
-	sdhi1_pins: sd1 {
-		sd1_mux {
-			pinmux = <RZG2L_PORT_PINMUX(9, 4, 14)>; /* SD1_CD */
-		};
+	can3_pins: can3 {
+		pinmux = <RZG2L_PORT_PINMUX(8,7,5)>, /* CAN3_RX */
+				 <RZG2L_PORT_PINMUX(8,6,5)>; /* CAN3_TX */
 	};
 
 	i2c1_pins: i2c1 {
@@ -624,6 +1030,79 @@
 	i2c8_pins: i2c8 {
 		pinmux = <RZG2L_PORT_PINMUX(0, 6, 1)>, /* I2C8_SDA */
 				 <RZG2L_PORT_PINMUX(0, 7, 1)>; /* I2C8_SCL */
+	};
+
+	gpio_pins: gpio {
+		pinmux = <RZG2L_PORT_PINMUX(7,2,0)>, /* P7_2 */
+				 <RZG2L_PORT_PINMUX(7,3,0)>; /* P7_3 */
+		bias-disable;
+		//input-enable;
+		//drive-open-drain;
+	};
+
+	scif0_pins: scif0 {
+		pins =  "SCIF_RXD", "SCIF_TXD";
+	};
+
+	sci0_pins: sci0 {
+		pinmux = <RZG2L_PORT_PINMUX(5,2,4)>, /* UART0_CTS */
+				 <RZG2L_PORT_PINMUX(5,1,1)>, /* UART0_RXD */
+				 <RZG2L_PORT_PINMUX(5,3,2)>, /* UART0_RTS */
+				 <RZG2L_PORT_PINMUX(5,0,1)>; /* UART0_TXD */
+	};
+
+	sci2_pins: sci2 {
+		pinmux = <RZG2L_PORT_PINMUX(5,6,4)>, /* UART2_CTS */
+				 <RZG2L_PORT_PINMUX(5,5,1)>, /* UART2_RXD */
+				 <RZG2L_PORT_PINMUX(5,7,2)>, /* UART2_RTS */
+				 <RZG2L_PORT_PINMUX(5,4,1)>; /* UART2_TXD */
+	};
+
+	sci3_pins: sci3 {
+		pinmux = <RZG2L_PORT_PINMUX(3,6,4)>, /* CTS3N */
+				 <RZG2L_PORT_PINMUX(3,5,2)>, /* RXD3_MISO3_SCL3 */
+				 <RZG2L_PORT_PINMUX(3,7,2)>, /* SS3_CTS3N_RTS3N */
+				 <RZG2L_PORT_PINMUX(3,4,2)>; /* TXD3_MOSI3_SDA3 */
+	};
+
+	sdhi1_pins: sd1 {
+		sd1_mux {
+			pinmux = <RZG2L_PORT_PINMUX(9, 4, 14)>; /* SD1_CD */
+		};
+	};
+
+	sdhi2_pins: sd2 {
+		sd2_data {
+			pinmux = <RZG2L_PORT_PINMUX(11, 1, 1)>, /* SD2_DATA0 */
+					 <RZG2L_PORT_PINMUX(11, 2, 1)>, /* SD2_DATA1 */
+					 <RZG2L_PORT_PINMUX(11, 3, 1)>, /* SD2_DATA2 */
+					 <RZG2L_PORT_PINMUX(11, 4, 1)>; /* SD2_DATA3 */
+		};
+
+		sd2_ctrl {
+			pinmux = <RZG2L_PORT_PINMUX(11, 0, 1)>, /* SD2_CLK */
+					 <RZG2L_PORT_PINMUX(11, 5, 1)>; /* SD2_CMD */
+		};
+	};
+
+	sound_clk_pins: sound_clk {
+		pinmux = <RZG2L_PORT_PINMUX(1, 0, 7)>, /* AUDIO_CLKB */
+				 <RZG2L_PORT_PINMUX(1, 1, 7)>, /* AUDIO_CLKC */
+				 <RZG2L_PORT_PINMUX(9, 7, 8)>; /* AUDIO_CLKOUT */
+	};
+
+	sound_pins: sound {
+		pinmux = <RZG2L_PORT_PINMUX(4,4,7)>, /* SSI1_SCK */
+				 <RZG2L_PORT_PINMUX(4,5,7)>, /* SSI1_WS */
+				 <RZG2L_PORT_PINMUX(4,6,7)>, /* SSI1_SDATA */
+				 <RZG2L_PORT_PINMUX(4,7,7)>; /* SSI2_SDATA */
+	};
+
+	spi1_pins: spi1 {
+		pinmux = <RZG2L_PORT_PINMUX(9,1,1)>, /* MISOA */
+				 <RZG2L_PORT_PINMUX(9,0,1)>, /* MOSIA */
+				 <RZG2L_PORT_PINMUX(9,2,1)>, /* RSPCKA */
+				 <RZG2L_PORT_PINMUX(9,3,1)>; /* SSLA0 */
 	};
 
 	usb20_pins: usb20 {
@@ -644,27 +1123,5 @@
 	usb31_pins: usb31 {
 		pinmux = <RZG2L_PORT_PINMUX(6,7,15)>, /* USB31_OVRCURN */
 				 <RZG2L_PORT_PINMUX(6,6,15)>; /* USB31_VBUSEN */
-	};
-
-	spi1_pins: spi1 {
-		pinmux = <RZG2L_PORT_PINMUX(9,1,1)>, /* MISOA */
-				 <RZG2L_PORT_PINMUX(9,0,1)>, /* MOSIA */
-				 <RZG2L_PORT_PINMUX(9,2,1)>, /* RSPCKA */
-				 <RZG2L_PORT_PINMUX(9,3,1)>; /* SSLA0 */
-		bias-disable;
-		drive-strength = <2>;
-	};
-
-	sound_clk_pins: sound_clk {
-		pinmux = <RZG2L_PORT_PINMUX(1, 0, 7)>, /* AUDIO_CLKB */
-			 <RZG2L_PORT_PINMUX(1, 1, 7)>, /* AUDIO_CLKC */
-			 <RZG2L_PORT_PINMUX(9, 7, 8)>; /* AUDIO_CLKOUT */
-	};
-
-	sound_pins: sound {
-		pinmux = <RZG2L_PORT_PINMUX(4,4,7)>, /* SSI1_SCK */
-				 <RZG2L_PORT_PINMUX(4,5,7)>, /* SSI1_WS */
-				 <RZG2L_PORT_PINMUX(4,6,7)>, /* SSI1_SDATA */
-				 <RZG2L_PORT_PINMUX(4,7,7)>; /* SSI2_SDATA */
 	};
 };
