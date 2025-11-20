@@ -436,6 +436,7 @@
 
 &cru1 {
 	status = "okay";
+	memory-region = <&cru_func>;
 };
 
 &cru2 {
@@ -582,6 +583,12 @@
 };
 
 &iq {
+	status = "okay";
+};
+
+&isp {
+	sensor-i2c = <&imx415b>;
+	sensor-default-preset-mode = <0>;
 	status = "okay";
 };
 
@@ -791,8 +798,10 @@
 		pinctrl-0 = <&bt_host_wake_l &bt_wake_l &bt_reg_on_h>;
 		vbat-supply = <&vcc3v3_sys>;
 		vddio-supply = <&vcc_1v8>;
-	
+	}
+}
 */
+
 &sci2 {
 	pinctrl-0 = <&sci2_pins>;
 	pinctrl-names = "default";

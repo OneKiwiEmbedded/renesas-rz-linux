@@ -5,6 +5,20 @@
  * Copyright (C) 2021 Renesas Electronics Corp.
  *
  * Based on the rcar_vin driver
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+ * or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program. If not, see <https://www.gnu.org/licenses/>.
+ *
  */
 
 #include <linux/delay.h>
@@ -1436,6 +1450,21 @@ static irqreturn_t rzv2h_cru_irq(int irq, void *data)
 
 		cru_dbg(cru, "Capture start synced!\n");
 		cru->state = RUNNING;
+	}
+
+	if (slot != prev_slot[cru->id]) {
+		/* Update value of previous memory bank slot */
+		prev_slot[cru->id] = slot;
+	} else {
+		/*
+		* AXI-Bus congestion maybe occurred.
+		* Set auto recovery mode to clear all FIFOs
+		* and resume transmission.
+		*/
+		rzg2l_cru_write(cru, AMnFIFO, 0);
+
+		cru_dbg(cru, "Dropping frame %u with CRU channel %d\n", cru->sequence, cru->id);
+		goto done;
 	}
 
 	if (slot != prev_slot[cru->id]) {
