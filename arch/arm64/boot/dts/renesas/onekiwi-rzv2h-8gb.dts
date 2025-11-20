@@ -432,6 +432,7 @@
 
 &cru0 {
 	status = "okay";
+	memory-region = <&cru_func>;
 };
 
 &cru1 {
@@ -449,21 +450,33 @@
 
 &csi20 {
 	status = "okay";
-};
 
-&csi21 {
- 	status = "okay";
- 
- 	ports {
- 		port {
-			csi21_in: endpoint {
- 				clock-lanes = <0>;
+	ports {
+		port {
+			csi20_in: endpoint {
+				clock-lanes = <0>;
 				data-lanes = <1 2 3 4>;
-				remote-endpoint = <&imx415b_to_csi21>;
- 			};
- 		};
+				remote-endpoint = <&imx415a_to_csi20>;
+			};
+		};
 	};
 };
+
+#ifndef SINGLE_SENSOR
+&csi21 {
+	status = "okay";
+
+	ports {
+		port {
+			csi21_in: endpoint {
+				clock-lanes = <0>;
+				data-lanes = <1 2 3 4>;
+				remote-endpoint = <&imx415b_to_csi21>;
+			};
+		};
+	};
+};
+#endif
 
 &csi22 {
 	status = "okay";
@@ -579,7 +592,11 @@
 
 &input_video_control {
 	status = "okay";
-	crus = <&cru1>;
+	crus = <&cru0
+#ifndef SINGLE_SENSOR
+	&cru1
+#endif
+	>;
 };
 
 &iq {
@@ -587,37 +604,47 @@
 };
 
 &isp {
-	sensor-i2c = <&imx415b>;
-	sensor-default-preset-mode = <0>;
+	sensor-i2c = <&imx415a
+#ifndef SINGLE_SENSOR
+	 &imx415b
+#endif
+	 >;
+	sensor-default-preset-mode = <0
+#ifndef SINGLE_SENSOR
+	1
+#endif
+>;
 	status = "okay";
 };
 
+#ifndef SINGLE_SENSOR
 &i2c1 {
 	pinctrl-0 = <&i2c1_pins>;
 	pinctrl-names = "default";
+
 	status = "okay";
 
 	imx415b: imx415@1a {
 		compatible = "sony,imx415";
 		reg = <0x1a>;
-		//slave-mode;
+		slave-mode;
 		clock-names = "inck";
 		clocks = <&clk_ext_camera>;
 		ovdd-supply = <&imx415_ovdd_1v8>;
 		avdd-supply = <&imx415_avdd_2v9>;
 		dvdd-supply = <&imx415_dvdd_1v1>;
- 		reset-gpios = <&pinctrl RZG2L_GPIO(3, 1) GPIO_ACTIVE_LOW>;
-
- 		port {
+		reset-gpios = <&pinctrl RZG2L_GPIO(1, 4) GPIO_ACTIVE_LOW>;
+		port {
 			imx415b_to_csi21: endpoint {
- 				clock-lanes = <0>;
+				clock-lanes = <0>;
 				data-lanes = <1 2 3 4>;
 				link-frequencies = /bits/ 64 <445500000 445500000 445500000 445500000>;
  				remote-endpoint = <&csi21_in>;
- 			};
- 		};
- 	};
+			};
+		};
+	};
 };
+#endif
 
 &i2c4_csi3 {
 	status = "okay";
@@ -665,6 +692,25 @@
 
 &i2c6_csi0 {
 	status = "okay";
+
+	imx415a: imx415@1a {
+		compatible = "sony,imx415";
+		reg = <0x1a>;
+		clock-names = "inck";
+		clocks = <&clk_ext_camera>;
+		ovdd-supply = <&imx415_ovdd_1v8>;
+		avdd-supply = <&imx415_avdd_2v9>;
+		dvdd-supply = <&imx415_dvdd_1v1>;
+		reset-gpios = <&pinctrl RZG2L_GPIO(3, 0) GPIO_ACTIVE_LOW>;
+		port {
+			imx415a_to_csi20: endpoint {
+				clock-lanes = <0>;
+				data-lanes = <1 2 3 4>;
+				link-frequencies = /bits/ 64 <445500000 445500000 445500000 445500000>;
+				remote-endpoint = <&csi20_in>;
+			};
+		};
+	};
 };
 
 &i2c7_soft {
@@ -1021,6 +1067,14 @@
 };
 
 &pinctrl {
+	/* cam0_pwr_en is used by Google Coral Camera from CSI20 and CSI21 */
+	cam0_pwr_en {
+		gpio-hog;
+		gpios = <RZG2L_GPIO(3, 1) GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "cam0_pwr_en";
+	};
+
 	can2_pins: can2 {
 		pinmux = <RZG2L_PORT_PINMUX(8,5,5)>, /* CAN2_RX */
 				 <RZG2L_PORT_PINMUX(8,4,5)>; /* CAN2_TX */
