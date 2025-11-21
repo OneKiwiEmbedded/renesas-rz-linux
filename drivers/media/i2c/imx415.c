@@ -1057,6 +1057,50 @@ static int imx415_probe(struct i2c_client *client)
 {
 	struct imx415 *sensor;
 	int ret;
+	/* presence check params */
+    const int PRESENCE_RETRIES = 3;
+    const int PRESENCE_DELAY_MS = 20;
+    int pres_try;
+    int pres_ret = 0;
+    struct i2c_msg msg;
+    u8 buf;
+
+    /* If user wants to skip probing (e.g. sensor not connected), allow that */
+    if (skip_probe) {
+        dev_info(&client->dev, "imx415: probe skipped by module param\n");
+        return -ENODEV;
+    }
+
+    /* Light-weight presence check BEFORE powering the sensor.
+     * Try a short read from the i2c addr a few times; if nothing responds,
+     * bail out early to avoid powering/clocks and to reduce i2c error spam.
+     *
+     * We use a single I2C read message (no register write) which is a minimal
+     * bus transaction many adapters support. If adapter fails, this will
+     * return <0 and we treat as no device.
+     */
+    if (client->adapter) {
+        msg.addr = client->addr;
+        msg.flags = I2C_M_RD;
+        msg.len = 1;
+        msg.buf = &buf;
+
+        for (pres_try = 0; pres_try < PRESENCE_RETRIES; pres_try++) {
+            struct i2c_msg m = msg;
+            pres_ret = i2c_transfer(client->adapter, &m, 1);
+            if (pres_ret == 1)
+                break;
+            /* small delay between attempts */
+            msleep(PRESENCE_DELAY_MS);
+        }
+        if (pres_ret != 1) {
+            /* rate-limited informational log to avoid flooding dmesg */
+            dev_info_ratelimited(&client->dev,
+                                 "no i2c response at addr 0x%02x, skipping probe\n",
+                                 client->addr);
+            return -ENODEV;
+        }
+    }
 
 	sensor = devm_kzalloc(&client->dev, sizeof(*sensor), GFP_KERNEL);
 	if (!sensor)
@@ -1182,6 +1226,11 @@ static struct i2c_driver imx415_driver = {
 //		.pm = pm_ptr(&imx415_pm_ops),
 	},
 };
+
+/* module parameter to skip probe when sensor is not connected */
+static bool skip_probe;
+module_param(skip_probe, bool, 0444);
+MODULE_PARM_DESC(skip_probe, "Skip IMX415 probe (useful when sensor not present)");
 
 module_i2c_driver(imx415_driver);
 
