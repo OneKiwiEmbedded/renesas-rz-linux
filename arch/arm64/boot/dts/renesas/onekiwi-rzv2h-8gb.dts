@@ -10,7 +10,6 @@
 #include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
 
 #define CODEC_SGTLT5000		1
-#define SINGLE_SENSOR
 
 / {
 	model = "OneKiwi RZ/V2H 8GB";
@@ -462,7 +461,6 @@
 	};
 };
 
-#ifndef SINGLE_SENSOR
 &csi21 {
 	status = "okay";
 
@@ -476,7 +474,6 @@
 		};
 	};
 };
-#endif
 
 &csi22 {
 	status = "okay";
@@ -592,11 +589,7 @@
 
 &input_video_control {
 	status = "okay";
-	crus = <&cru0
-#ifndef SINGLE_SENSOR
-	&cru1
-#endif
-	>;
+	crus = <&cru0 &cru1>;
 };
 
 &iq {
@@ -604,30 +597,20 @@
 };
 
 &isp {
-	sensor-i2c = <&imx415a
-#ifndef SINGLE_SENSOR
-	 &imx415b
-#endif
-	 >;
-	sensor-default-preset-mode = <0
-#ifndef SINGLE_SENSOR
-	1
-#endif
->;
+	sensor-i2c = <&imx415a &imx415b>;
+	sensor-default-preset-mode = <0 1>;
 	status = "okay";
 };
 
-#ifndef SINGLE_SENSOR
 &i2c1 {
 	pinctrl-0 = <&i2c1_pins>;
 	pinctrl-names = "default";
-
 	status = "okay";
 
 	imx415b: imx415@1a {
 		compatible = "sony,imx415";
 		reg = <0x1a>;
-		slave-mode;
+		//slave-mode;
 		clock-names = "inck";
 		clocks = <&clk_ext_camera>;
 		ovdd-supply = <&imx415_ovdd_1v8>;
@@ -644,7 +627,6 @@
 		};
 	};
 };
-#endif
 
 &i2c4_csi3 {
 	status = "okay";
