@@ -100,6 +100,10 @@ struct v4l2_subdev_state {};
 #define IMX415_TLPX		  IMX415_REG_16BIT(0x4028)
 #define IMX415_INCKSEL7		  IMX415_REG_8BIT(0x4074)
 
+static bool imx415_skip_probe;
+module_param_named(skip_probe, imx415_skip_probe, bool, 0444);
+MODULE_PARM_DESC(skip_probe, "Skip IMX415 probe (useful when sensor not present)");
+
 struct imx415_reg {
 	u32 address;
 	u32 val;
@@ -1066,7 +1070,7 @@ static int imx415_probe(struct i2c_client *client)
     u8 buf;
 
     /* If user wants to skip probing (e.g. sensor not connected), allow that */
-    if (skip_probe) {
+    if (imx415_skip_probe) {
         dev_info(&client->dev, "imx415: probe skipped by module param\n");
         return -ENODEV;
     }
@@ -1226,11 +1230,6 @@ static struct i2c_driver imx415_driver = {
 //		.pm = pm_ptr(&imx415_pm_ops),
 	},
 };
-
-/* module parameter to skip probe when sensor is not connected */
-static bool skip_probe;
-module_param(skip_probe, bool, 0444);
-MODULE_PARM_DESC(skip_probe, "Skip IMX415 probe (useful when sensor not present)");
 
 module_i2c_driver(imx415_driver);
 
